@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from aiogram import Bot
 
@@ -44,7 +44,10 @@ async def poll_once(bot: Bot, notify: bool = True) -> int:
     log.info("OLX: получено %s, новых %s, ошибок разделов %s", len(items), len(new), len(errors))
     if not notify:
         return len(new)
+    pilot_over = bool(config.pilot_until and date.today() > config.pilot_until)
     for user in await db.active_users():
+        if pilot_over and user["id"] not in config.admin_ids:
+            continue  # пилот закончился: рассылаем только админам
         for item in new:
             if is_fresh(item) and matches(item, user["filters"]) and await db.mark_sent(user["id"], item["id"]):
                 await send_listing(bot, user, item)

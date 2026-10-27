@@ -18,6 +18,8 @@ git clone https://github.com/railf66/makon-radar /root/makon-radar
 cd /root/makon-radar && sh deploy/install.sh
 ```
 Скрипт спросит токен бота и Telegram id админов, поставит бота как службу и включит автозапуск.
+Пилот (код доступа и дата окончания): `sh deploy/pilot.sh makon2026 2026-11-10`.
+После даты окончания бот отвечает агентам «пилот завершён» и шлёт объявления только админам.
 Обновить код: `cd /root/makon-radar && git pull && sh deploy/install.sh` (настройки и база сохраняются).
 
 ## Запуск на своём компьютере
