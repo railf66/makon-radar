@@ -1,0 +1,14 @@
+[Unit]
+Description=Makon Radar - OLX Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=olxbot
+WorkingDirectory=/opt/olx-bot
+ExecStart=/opt/olx-bot/.venv/bin/python main.py
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
