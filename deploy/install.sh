@@ -7,8 +7,9 @@ apt-get update -y && apt-get install -y python3 python3-venv
 id olxbot >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin olxbot
 mkdir -p /opt/olx-bot
 cp -r main.py requirements.txt bot /opt/olx-bot/
-if [ ! -f /opt/olx-bot/.env ]; then
-    cp .env.example /opt/olx-bot/.env
+[ -f /opt/olx-bot/.env ] || cp .env.example /opt/olx-bot/.env
+# Спрашиваем токен, пока в .env нет настоящего (в том числе если прошлый запуск прервался)
+if grep -q '^BOT_TOKEN=123456:ABC' /opt/olx-bot/.env || ! grep -q '^BOT_TOKEN=..*' /opt/olx-bot/.env; then
     printf "Токен бота от @BotFather: " ; read -r TOKEN < /dev/tty
     printf "Telegram id админов через запятую: " ; read -r ADMINS < /dev/tty
     sed -i "s|^BOT_TOKEN=.*|BOT_TOKEN=$TOKEN|; s|^ADMIN_IDS=.*|ADMIN_IDS=$ADMINS|" /opt/olx-bot/.env
