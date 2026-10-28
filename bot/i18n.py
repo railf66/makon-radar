@@ -37,6 +37,7 @@ T = {
     "menu_pause": {"ru": "⏸ Пауза", "uz": "⏸ To‘xtatish"},
     "menu_resume": {"ru": "▶️ Включить рассылку", "uz": "▶️ Yuborishni yoqish"},
     "menu_lang": {"ru": "🌐 Язык", "uz": "🌐 Til"},
+    "menu_shown": {"ru": "Меню внизу экрана 👇", "uz": "Menyu ekranning pastida 👇"},
     "paused": {"ru": "Рассылка на паузе.", "uz": "Yuborish to‘xtatildi."},
     "resumed": {"ru": "Рассылка включена.", "uz": "Yuborish yoqildi."},
     "filters_title": {"ru": "Ваши фильтры. Нажмите, чтобы изменить:", "uz": "Filtrlaringiz. O‘zgartirish uchun bosing:"},
@@ -83,3 +84,14 @@ def t(key: str, lang: str) -> str:
 def district_name(key: str, lang: str) -> str:
     ru, uz, _ = DISTRICTS[key]
     return uz if lang == "uz" else ru
+
+
+# Команды для кнопки «Меню» слева от поля ввода
+COMMANDS = {
+    "ru": [("menu", "Показать меню"), ("filters", "Фильтры"), ("latest", "Последние объявления"),
+           ("export", "Выгрузка в Excel"), ("pause", "Пауза / включить рассылку"), ("lang", "Язык"),
+           ("start", "Начать заново")],
+    "uz": [("menu", "Menyuni ko‘rsatish"), ("filters", "Filtrlar"), ("latest", "So‘nggi e’lonlar"),
+           ("export", "Excelga yuklash"), ("pause", "To‘xtatish / yoqish"), ("lang", "Til"),
+           ("start", "Qaytadan boshlash")],
+}

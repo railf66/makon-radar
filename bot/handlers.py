@@ -35,7 +35,7 @@ def lang_kb():
 def main_kb(user):
     lang = user["lang"]
     pause = t("menu_pause", lang) if user["active"] else t("menu_resume", lang)
-    return ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
+    return ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True, keyboard=[
         [KeyboardButton(text=t("menu_filters", lang)), KeyboardButton(text=t("menu_latest", lang))],
         [KeyboardButton(text=t("menu_export", lang)), KeyboardButton(text=pause)],
         [KeyboardButton(text=t("menu_lang", lang))],
@@ -136,6 +136,7 @@ async def authorized_user(user_id: int, answer):
 
 # --- фильтры ---
 
+@router.message(Command("filters"))
 @router.message(F.text.in_(menu_texts("menu_filters")))
 async def show_filters(msg: Message):
     if user := await authorized_user(msg.from_user.id, msg.answer):
@@ -214,6 +215,14 @@ async def filters_done(cb: CallbackQuery):
 
 # --- меню ---
 
+@router.message(Command("menu"))
+async def show_menu(msg: Message):
+    """Заново показывает нижнее меню (на компьютере оно бывает скрыто)."""
+    if user := await authorized_user(msg.from_user.id, msg.answer):
+        await msg.answer(t("menu_shown", user["lang"]), reply_markup=main_kb(user))
+
+
+@router.message(Command("latest"))
 @router.message(F.text.in_(menu_texts("menu_latest")))
 async def latest(msg: Message):
     user = await authorized_user(msg.from_user.id, msg.answer)
@@ -226,6 +235,7 @@ async def latest(msg: Message):
         await send_listing(msg.bot, user, item)
 
 
+@router.message(Command("export"))
 @router.message(F.text.in_(menu_texts("menu_export")))
 async def export(msg: Message):
     user = await authorized_user(msg.from_user.id, msg.answer)
@@ -240,6 +250,7 @@ async def export(msg: Message):
                               caption=f"{t('export_caption', user['lang'])}: {len(items)}")
 
 
+@router.message(Command("pause"))
 @router.message(F.text.in_(menu_texts("menu_pause") | menu_texts("menu_resume")))
 async def pause(msg: Message):
     user = await authorized_user(msg.from_user.id, msg.answer)
@@ -251,6 +262,7 @@ async def pause(msg: Message):
     await msg.answer(t("resumed" if active else "paused", user["lang"]), reply_markup=main_kb(user))
 
 
+@router.message(Command("lang"))
 @router.message(F.text.in_(menu_texts("menu_lang")))
 async def change_lang(msg: Message):
     await msg.answer(t("choose_lang", "ru"), reply_markup=lang_kb())
