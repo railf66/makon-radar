@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, timedelta
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
@@ -79,8 +79,19 @@ def menu_texts(key):
     return set(T[key].values())
 
 
-def pilot_over() -> bool:
-    return bool(config.pilot_until and date.today() > config.pilot_until)
+def trial_over(user: dict) -> bool:
+    """У каждого агента свой срок; админы без ограничений."""
+    if user["id"] in config.admin_ids or not user.get("trial_until"):
+        return False
+    return date.today() > date.fromisoformat(user["trial_until"])
+
+
+def contact_suffix() -> str:
+    return f": {config.contact}" if config.contact else ""
+
+
+def fmt_date(d: str) -> str:
+    return date.fromisoformat(d).strftime("%d.%m.%Y")
 
 
 # --- старт и доступ ---
@@ -113,12 +124,21 @@ async def set_lang(cb: CallbackQuery, state: FSMContext):
 @router.message(S.code)
 async def check_code(msg: Message, state: FSMContext):
     user = await db.get_user(msg.from_user.id)
-    if (msg.text or "").strip() != config.access_code:
+    text = (msg.text or "").strip()
+    if text.startswith("/"):
+        await msg.answer(t("code_first", user["lang"]))
+        return
+    if text.lower() != config.access_code.lower():
         await msg.answer(t("bad_code", user["lang"]))
         return
     await state.clear()
-    await db.update_user(msg.from_user.id, authorized=1)
+    fields = {"authorized": 1, "trial_warned": 0}
+    if msg.from_user.id not in config.admin_ids:
+        fields["trial_until"] = (date.today() + timedelta(days=config.trial_days)).isoformat()
+    await db.update_user(msg.from_user.id, **fields)
     user = await db.get_user(msg.from_user.id)
+    if user.get("trial_until"):
+        await msg.answer(t("trial_started", user["lang"]).format(date=fmt_date(user["trial_until"])))
     await msg.answer(t("welcome", user["lang"]), reply_markup=main_kb(user))
     await msg.answer(t("filters_title", user["lang"]), reply_markup=filters_kb(user))
 
@@ -128,8 +148,8 @@ async def authorized_user(user_id: int, answer):
     if not user or not user["authorized"]:
         await answer(t("choose_lang", "ru"), reply_markup=lang_kb())
         return None
-    if pilot_over() and user_id not in config.admin_ids:
-        await answer(t("pilot_over", user["lang"]))
+    if trial_over(user):
+        await answer(t("pilot_over", user["lang"]) + contact_suffix())
         return None
     return user
 
@@ -274,3 +294,48 @@ async def stats(msg: Message):
         return
     s = await db.stats()
     await msg.answer(f"Агентов: {s['users']}\nОбъявлений собрано: {s['listings']}\nОтправлено: {s['sent']}")
+
+
+# --- админ: агенты и продление ---
+
+@router.message(Command("users"))
+async def users_list(msg: Message):
+    if msg.from_user.id not in config.admin_ids:
+        return
+    lines = []
+    for u in await db.authorized_users():
+        if u["id"] in config.admin_ids:
+            continue
+        until = f"до {fmt_date(u['trial_until'])}" if u.get("trial_until") else "без срока"
+        mark_ = "⛔" if trial_over(u) else "✅"
+        lines.append(f"{mark_} {u['name']} — id {u['id']} — {until}")
+    await msg.answer("\n".join(lines) or "Агентов пока нет.")
+
+
+@router.message(Command("extend"))
+async def extend(msg: Message):
+    """/extend ID ДНЕЙ или /extend ID ГГГГ-ММ-ДД или /extend ID 0 (без срока)."""
+    if msg.from_user.id not in config.admin_ids:
+        return
+    parts = (msg.text or "").split()
+    usage = "Как продлить: /extend ID ДНЕЙ (например /extend 123456 30) или /extend ID 2026-12-31. /extend ID 0 — без срока. ID есть в /users."
+    if len(parts) != 3 or not parts[1].isdigit():
+        await msg.answer(usage)
+        return
+    user = await db.get_user(int(parts[1]))
+    if not user:
+        await msg.answer("Нет такого агента. Посмотрите ID в /users.")
+        return
+    arg = parts[2]
+    try:
+        if arg == "0":
+            until = None
+        elif arg.isdigit():
+            until = (date.today() + timedelta(days=int(arg))).isoformat()
+        else:
+            until = date.fromisoformat(arg).isoformat()
+    except ValueError:
+        await msg.answer(usage)
+        return
+    await db.update_user(user["id"], trial_until=until, trial_warned=0, active=1)
+    await msg.answer(f"Готово: {user['name']} — " + (f"до {fmt_date(until)}" if until else "без срока") + ".")

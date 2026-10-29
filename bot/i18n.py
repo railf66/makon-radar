@@ -23,6 +23,18 @@ T = {
         "uz": "Bu agentlik uchun botning sinov versiyasi. Kirish kodini kiriting:",
     },
     "bad_code": {"ru": "Неверный код. Попробуйте ещё раз.", "uz": "Kod noto‘g‘ri. Qayta urinib ko‘ring."},
+    "code_first": {
+        "ru": "Сначала введите код доступа с визитки (обычным сообщением, без /).",
+        "uz": "Avval vizitkadagi kirish kodini kiriting (oddiy xabar bilan, / belgisisiz).",
+    },
+    "trial_started": {
+        "ru": "Код принят! Бесплатный пробный период до {date} включительно.",
+        "uz": "Kod qabul qilindi! Bepul sinov muddati {date} gacha (shu kun ham kiradi).",
+    },
+    "trial_tomorrow": {
+        "ru": "Завтра, {date}, заканчивается бесплатный пробный период Makon Radar. Чтобы продолжить получать объявления, свяжитесь с нами{contact}.",
+        "uz": "Ertaga, {date}, Makon Radar bepul sinov muddati tugaydi. E’lonlarni olishni davom ettirish uchun biz bilan bog‘laning{contact}.",
+    },
     "pilot_over": {
         "ru": "Пилотный период закончился. Свяжитесь с нами, чтобы продолжить.",
         "uz": "Sinov muddati tugadi. Davom ettirish uchun biz bilan bog‘laning.",

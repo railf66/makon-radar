@@ -29,6 +29,10 @@ class Config:
     pilot_until: date | None = (
         date.fromisoformat(os.environ["PILOT_UNTIL"]) if os.getenv("PILOT_UNTIL") else None
     )
+    # Пробный период для каждого агента: столько дней с момента ввода кода
+    trial_days: int = int(os.getenv("TRIAL_DAYS", "14"))
+    # Кому писать, чтобы продолжить после пробного периода (например @username или телефон)
+    contact: str = os.getenv("CONTACT", "")
     olx_enabled: bool = os.getenv("OLX_ENABLED", "1") == "1"
     poll_interval: int = int(os.getenv("POLL_INTERVAL", "600"))
     fresh_hours: int = int(os.getenv("FRESH_HOURS", "48"))

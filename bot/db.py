@@ -60,7 +60,20 @@ class DB:
         self.conn = await aiosqlite.connect(self.path)
         self.conn.row_factory = aiosqlite.Row
         await self.conn.executescript(SCHEMA)
+        await self._migrate()
         await self.conn.commit()
+
+    async def _migrate(self):
+        cols = {r[1] for r in await (await self.conn.execute("PRAGMA table_info(users)")).fetchall()}
+        if "trial_until" not in cols:
+            await self.conn.execute("ALTER TABLE users ADD COLUMN trial_until TEXT")
+            # Кто подключился до личных сроков, получает общий срок пилота (PILOT_UNTIL)
+            if config.pilot_until:
+                await self.conn.execute("UPDATE users SET trial_until=? WHERE authorized=1",
+                                        (config.pilot_until.isoformat(),))
+        if "trial_warned" not in cols:
+            # 0 — не предупреждали, 1 — предупредили за день, 2 — сообщили, что срок вышел
+            await self.conn.execute("ALTER TABLE users ADD COLUMN trial_warned INTEGER DEFAULT 0")
 
     async def close(self):
         if self.conn:
@@ -90,6 +103,10 @@ class DB:
         sets = ", ".join(f"{k}=?" for k in fields)
         await self.conn.execute(f"UPDATE users SET {sets} WHERE id=?", (*fields.values(), user_id))
         await self.conn.commit()
+
+    async def authorized_users(self):
+        cur = await self.conn.execute("SELECT id FROM users WHERE authorized=1 ORDER BY created_at")
+        return [await self.get_user(r["id"]) for r in await cur.fetchall()]
 
     async def active_users(self):
         cur = await self.conn.execute("SELECT id FROM users WHERE authorized=1 AND active=1")

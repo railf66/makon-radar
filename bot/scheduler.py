@@ -10,6 +10,8 @@ from .db import db
 from .filters import matches
 from .olx import fetch_all
 from .sender import send_listing
+from .handlers import contact_suffix, fmt_date, trial_over
+from .i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -44,15 +46,36 @@ async def poll_once(bot: Bot, notify: bool = True) -> int:
     log.info("OLX: получено %s, новых %s, ошибок разделов %s", len(items), len(new), len(errors))
     if not notify:
         return len(new)
-    pilot_over = bool(config.pilot_until and date.today() > config.pilot_until)
     for user in await db.active_users():
-        if pilot_over and user["id"] not in config.admin_ids:
-            continue  # пилот закончился: рассылаем только админам
+        if trial_over(user):
+            continue  # пробный период закончился: этому агенту больше не шлём
         for item in new:
             if is_fresh(item) and matches(item, user["filters"]) and await db.mark_sent(user["id"], item["id"]):
                 await send_listing(bot, user, item)
                 await asyncio.sleep(0.05)  # лимиты Telegram
     return len(new)
+
+
+async def check_trials(bot: Bot):
+    """За день до конца предупреждаем агента и админа; в день окончания сообщаем админу."""
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    for user in await db.authorized_users():
+        until = user.get("trial_until")
+        if not until or user["id"] in config.admin_ids:
+            continue
+        if until == tomorrow and user["trial_warned"] < 1:
+            try:
+                await bot.send_message(user["id"], t("trial_tomorrow", user["lang"]).format(
+                    date=fmt_date(until), contact=contact_suffix()))
+            except Exception:
+                log.warning("Не смог предупредить %s", user["id"])
+            await notify_admins(bot, f"⏰ У {user['name']} (id {user['id']}) пробный период заканчивается завтра, {fmt_date(until)}.\n"
+                                     f"Продлить: /extend {user['id']} 30")
+            await db.update_user(user["id"], trial_warned=1)
+        elif trial_over(user) and user["trial_warned"] < 2:
+            await notify_admins(bot, f"⛔ У {user['name']} (id {user['id']}) закончился пробный период. "
+                                     f"Продлить: /extend {user['id']} 30")
+            await db.update_user(user["id"], trial_warned=2)
 
 
 async def poll_loop(bot: Bot):
@@ -65,6 +88,10 @@ async def poll_loop(bot: Bot):
     alerted = False
     while True:
         delay = config.poll_interval
+        try:
+            await check_trials(bot)
+        except Exception:
+            log.exception("Ошибка проверки пробных периодов")
         try:
             await poll_once(bot, notify=not first)
             first = False
