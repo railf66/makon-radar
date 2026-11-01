@@ -39,6 +39,12 @@ CREATE TABLE IF NOT EXISTS listings (
     first_seen TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_listings_seen ON listings(first_seen);
+CREATE TABLE IF NOT EXISTS dilnoza (
+    listing_id TEXT PRIMARY KEY,
+    title TEXT, url TEXT,
+    added_at TEXT,
+    removed_at TEXT
+);
 CREATE TABLE IF NOT EXISTS sent (
     user_id INTEGER, listing_id TEXT,
     PRIMARY KEY (user_id, listing_id)
@@ -130,6 +136,22 @@ class DB:
         cur = await self.conn.execute("SELECT * FROM listings WHERE id=?", (listing_id,))
         row = await cur.fetchone()
         return dict(row) if row else None
+
+    # --- объекты у Дильнозы ---
+    async def add_dilnoza(self, item: dict):
+        await self.conn.execute(
+            "INSERT OR REPLACE INTO dilnoza (listing_id, title, url, added_at, removed_at) VALUES (?,?,?,?,NULL)",
+            (item["id"], item["title"], item["url"], now()),
+        )
+        await self.conn.commit()
+
+    async def dilnoza_active(self):
+        cur = await self.conn.execute("SELECT * FROM dilnoza WHERE removed_at IS NULL ORDER BY added_at")
+        return [dict(r) for r in await cur.fetchall()]
+
+    async def dilnoza_removed(self, listing_id: str):
+        await self.conn.execute("UPDATE dilnoza SET removed_at=? WHERE listing_id=?", (now(), listing_id))
+        await self.conn.commit()
 
     async def recent_listings(self, days: int = 7, limit: int = 2000):
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()

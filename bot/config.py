@@ -45,6 +45,9 @@ class Config:
         int(x) for x in os.getenv("DILNOZA_USERS", "").split(",") if x.strip().isdigit()
     })
 
+    # Как часто проверять, не сняты ли с OLX объекты Дильнозы, в часах
+    dilnoza_check_hours: int = int(os.getenv("DILNOZA_CHECK_HOURS", "24"))
+
     def can_dilnoza(self, user_id: int) -> bool:
         return bool(self.dilnoza_webhook) and user_id in (self.dilnoza_users or self.admin_ids)
 
