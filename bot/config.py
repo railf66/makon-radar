@@ -38,6 +38,8 @@ class Config:
     fresh_hours: int = int(os.getenv("FRESH_HOURS", "48"))
     uzs_per_usd: float = float(os.getenv("UZS_PER_USD", "12800"))
     db_path: str = os.getenv("DB_PATH", "data/bot.db")
+    # Ссылка на вебхук Make для секретаря Дильнозы (пусто = кнопки «Дильнозе» нет)
+    dilnoza_webhook: str = os.getenv("DILNOZA_WEBHOOK", "")
 
 
 config = Config()

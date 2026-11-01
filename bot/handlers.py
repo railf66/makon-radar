@@ -11,6 +11,7 @@ from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardButto
 
 from .config import config
 from .db import db
+from .dilnoza import push_listing
 from .export import build_excel
 from .filters import format_listing, matches
 from .i18n import DISTRICTS, T, district_name, t
@@ -174,6 +175,36 @@ async def toggle(cb: CallbackQuery):
     kb = districts_kb(user) if field == "districts" else filters_kb(user)
     await cb.message.edit_reply_markup(reply_markup=kb)
     await cb.answer()
+
+
+# --- передать объект секретарю Дильнозе ---
+
+@router.callback_query(F.data.startswith("dz:"))
+async def to_dilnoza(cb: CallbackQuery):
+    user = await db.get_user(cb.from_user.id)
+    lang = user["lang"] if user else "ru"
+    if not user or not user["authorized"] or trial_over(user):
+        await cb.answer()
+        return
+    item = await db.get_listing(cb.data.split(":", 1)[1])
+    if not item or not await push_listing(item, cb.from_user.full_name):
+        await cb.answer(t("dz_fail", lang), show_alert=True)
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=t("open", lang), url=item["url"]),
+        btn(t("dz_done_btn", lang), "dz_done"),
+    ]])
+    try:
+        await cb.message.edit_reply_markup(reply_markup=kb)
+    except Exception:
+        pass
+    await cb.answer(t("dz_ok", lang))
+
+
+@router.callback_query(F.data == "dz_done")
+async def dilnoza_done(cb: CallbackQuery):
+    user = await db.get_user(cb.from_user.id)
+    await cb.answer(t("dz_ok", user["lang"] if user else "ru"))
 
 
 @router.callback_query(F.data == "districts")

@@ -126,6 +126,11 @@ class DB:
         await self.conn.commit()
         return cur.rowcount > 0
 
+    async def get_listing(self, listing_id: str):
+        cur = await self.conn.execute("SELECT * FROM listings WHERE id=?", (listing_id,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
     async def recent_listings(self, days: int = 7, limit: int = 2000):
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         cur = await self.conn.execute(
