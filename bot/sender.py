@@ -16,7 +16,7 @@ async def send_listing(bot: Bot, user: dict, item: dict):
     lang = user["lang"]
     text = format_listing(item, lang)
     row = [InlineKeyboardButton(text=t("open", lang), url=item["url"])]
-    if config.dilnoza_webhook:
+    if config.can_dilnoza(user["id"]):
         row.append(InlineKeyboardButton(text=t("dz_btn", lang), callback_data=f"dz:{item['id']}"))
     kb = InlineKeyboardMarkup(inline_keyboard=[row])
     try:

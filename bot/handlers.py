@@ -183,7 +183,7 @@ async def toggle(cb: CallbackQuery):
 async def to_dilnoza(cb: CallbackQuery):
     user = await db.get_user(cb.from_user.id)
     lang = user["lang"] if user else "ru"
-    if not user or not user["authorized"] or trial_over(user):
+    if not user or not user["authorized"] or trial_over(user) or not config.can_dilnoza(cb.from_user.id):
         await cb.answer()
         return
     item = await db.get_listing(cb.data.split(":", 1)[1])

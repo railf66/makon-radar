@@ -15,6 +15,7 @@ Google Таблица «Объекты агентства», в первой с�
 
 1. Модуль **Webhooks → Custom webhook**, «Add», имя `Makon Radar`. Скопируйте ссылку.
 2. На сервере: `sh deploy/set.sh DILNOZA_WEBHOOK ссылка` (из папки makon-radar).
+   Кнопку видят только админы. Добавить других: `sh deploy/set.sh DILNOZA_USERS id1,id2`
 3. В Radar нажмите «⭐ Дильнозе» под любым объявлением, Make сам узнает поля.
 4. Модуль **Google Sheets → Add a row**, таблица из п.1, поля:
    Дата=`added_at`, Агент=`added_by`, Сделка=`deal`, Тип=`type`, Заголовок=`title`, Цена=`price`,
