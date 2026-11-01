@@ -38,6 +38,18 @@ class Config:
     fresh_hours: int = int(os.getenv("FRESH_HOURS", "48"))
     uzs_per_usd: float = float(os.getenv("UZS_PER_USD", "12800"))
     db_path: str = os.getenv("DB_PATH", "data/bot.db")
+    # Ссылка на вебхук Make для секретаря Дильнозы (пусто = кнопки «Дильнозе» нет)
+    dilnoza_webhook: str = os.getenv("DILNOZA_WEBHOOK", "")
+    # Кто видит кнопку «Дильнозе»: Telegram id через запятую (пусто = только админы)
+    dilnoza_users: set[int] = field(default_factory=lambda: {
+        int(x) for x in os.getenv("DILNOZA_USERS", "").split(",") if x.strip().isdigit()
+    })
+
+    # Как часто проверять, не сняты ли с OLX объекты Дильнозы, в часах
+    dilnoza_check_hours: int = int(os.getenv("DILNOZA_CHECK_HOURS", "24"))
+
+    def can_dilnoza(self, user_id: int) -> bool:
+        return bool(self.dilnoza_webhook) and user_id in (self.dilnoza_users or self.admin_ids)
 
 
 config = Config()

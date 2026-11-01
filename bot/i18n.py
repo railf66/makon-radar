@@ -82,6 +82,12 @@ T = {
     "area_word": {"ru": "м²", "uz": "m²"},
     "floor_word": {"ru": "этаж", "uz": "qavat"},
     "open": {"ru": "Открыть на OLX", "uz": "OLX da ochish"},
+    "dz_btn": {"ru": "⭐ Дильнозе", "uz": "⭐ Dilnozaga"},
+    "dz_done_btn": {"ru": "✅ У Дильнозы", "uz": "✅ Dilnozada"},
+    "dz_ok": {"ru": "Передано Дильнозе, теперь она знает этот объект",
+              "uz": "Dilnozaga yuborildi, endi u bu obyektni biladi"},
+    "dz_fail": {"ru": "Не получилось передать, попробуйте позже",
+                "uz": "Yuborib bo‘lmadi, keyinroq urinib ko‘ring"},
     "export_caption": {
         "ru": "Объявления за 7 дней по вашим фильтрам",
         "uz": "Filtrlaringiz bo‘yicha 7 kunlik e’lonlar",

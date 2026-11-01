@@ -8,6 +8,7 @@ from bot.config import config
 from bot.db import db
 from bot.handlers import router
 from bot.i18n import COMMANDS
+from bot.dilnoza import dilnoza_loop
 from bot.scheduler import poll_loop
 
 
@@ -23,11 +24,12 @@ async def main():
     for lang, code in (("ru", None), ("uz", "uz")):
         await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in COMMANDS[lang]],
                                   language_code=code)
-    task = asyncio.create_task(poll_loop(bot))
+    tasks = [asyncio.create_task(poll_loop(bot)), asyncio.create_task(dilnoza_loop(bot))]
     try:
         await dp.start_polling(bot)
     finally:
-        task.cancel()
+        for task in tasks:
+            task.cancel()
         await db.close()
 
 

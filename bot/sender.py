@@ -4,6 +4,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from .config import config
 from .db import db
 from .filters import format_listing
 from .i18n import t
@@ -14,7 +15,10 @@ log = logging.getLogger(__name__)
 async def send_listing(bot: Bot, user: dict, item: dict):
     lang = user["lang"]
     text = format_listing(item, lang)
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=t("open", lang), url=item["url"])]])
+    row = [InlineKeyboardButton(text=t("open", lang), url=item["url"])]
+    if config.can_dilnoza(user["id"]):
+        row.append(InlineKeyboardButton(text=t("dz_btn", lang), callback_data=f"dz:{item['id']}"))
+    kb = InlineKeyboardMarkup(inline_keyboard=[row])
     try:
         if item.get("photo"):
             try:
