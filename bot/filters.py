@@ -8,7 +8,7 @@ def matches(item: dict, f: dict) -> bool:
         return False
     if f["ptype"] and item["ptype"] not in f["ptype"]:
         return False
-    if f["rooms"]:
+    if f["rooms"] and item["ptype"] != "commercial":  # у коммерции комнат обычно нет
         r = item.get("rooms")
         if r is None:
             return False

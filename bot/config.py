@@ -43,7 +43,6 @@ class Config:
 config = Config()
 
 # Разделы OLX.uz, которые собираем (id сверены с olx.uz 2026-10-27).
-# Коммерция выключена по решению агентства: category_id 14 (продажа) и 11 (аренда).
 OLX_BASE = "https://www.olx.uz"
 OLX_SECTIONS = [
     # deal: sale | rent, ptype: flat | house | commercial
@@ -51,6 +50,8 @@ OLX_SECTIONS = [
     {"deal": "rent", "ptype": "flat", "path": "nedvizhimost/kvartiry/arenda-dolgosrochnaya", "category_id": 1147},
     {"deal": "sale", "ptype": "house", "path": "nedvizhimost/doma/prodazha", "category_id": 18},
     {"deal": "rent", "ptype": "house", "path": "nedvizhimost/doma/arenda-dolgosrochnaya", "category_id": 330},
+    {"deal": "sale", "ptype": "commercial", "path": "nedvizhimost/kommercheskie-pomeshcheniya/prodazha", "category_id": 14},
+    {"deal": "rent", "ptype": "commercial", "path": "nedvizhimost/kommercheskie-pomeshcheniya/arenda", "category_id": 11},
 ]
 # Ташкент на OLX.uz
 OLX_CITY_SLUG = "tashkent"
