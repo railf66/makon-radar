@@ -31,6 +31,13 @@ class Config:
     )
     # Пробный период для каждого агента: столько дней с момента ввода кода
     trial_days: int = int(os.getenv("TRIAL_DAYS", "14"))
+    # 1 = пробный период по коду с визитки включается только после одобрения админом
+    trial_approval: bool = os.getenv("TRIAL_APPROVAL", "1") == "1"
+    # Сколько сотрудников входит в тариф агентства. 0 = без ограничения.
+    # Сверх этого админ добавляет платные места: /plan ID light 1
+    trial_seats: int = int(os.getenv("TRIAL_SEATS", "0"))
+    light_seats: int = int(os.getenv("LIGHT_SEATS", "2"))
+    pro_seats: int = int(os.getenv("PRO_SEATS", "0"))
     # Кому писать, чтобы продолжить после пробного периода (например @username или телефон)
     contact: str = os.getenv("CONTACT", "")
     olx_enabled: bool = os.getenv("OLX_ENABLED", "1") == "1"
@@ -47,6 +54,11 @@ class Config:
 
     # Как часто проверять, не сняты ли с OLX объекты Дильнозы, в часах
     dilnoza_check_hours: int = int(os.getenv("DILNOZA_CHECK_HOURS", "24"))
+
+    def seat_limit(self, agency: dict) -> int | None:
+        """Сколько сотрудников можно в агентстве; None = без ограничения."""
+        base = {"trial": self.trial_seats, "light": self.light_seats, "pro": self.pro_seats}.get(agency["plan"], 0)
+        return None if base == 0 else base + (agency.get("extra_seats") or 0)
 
     def can_dilnoza(self, user_id: int) -> bool:
         return bool(self.dilnoza_webhook) and user_id in (self.dilnoza_users or self.admin_ids)

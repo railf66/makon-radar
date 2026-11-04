@@ -31,13 +31,42 @@ T = {
         "ru": "Код принят! Бесплатный пробный период до {date} включительно.",
         "uz": "Kod qabul qilindi! Bepul sinov muddati {date} gacha (shu kun ham kiradi).",
     },
+    "team_code": {
+        "ru": "Чтобы подключить коллег из вашего агентства, дайте им код {code}. Его вводят вместо кода с визитки.",
+        "uz": "Agentligingizdagi hamkasblarni ulash uchun ularga {code} kodini bering. Uni vizitkadagi kod o‘rniga kiritishadi.",
+    },
+    "trial_pending": {
+        "ru": "Код принят! Заявка на пробный период отправлена, мы подтвердим её в ближайшее время и бот вам напишет.",
+        "uz": "Kod qabul qilindi! Sinov muddatiga ariza yuborildi, tez orada tasdiqlaymiz va bot sizga yozadi.",
+    },
+    "trial_rejected": {
+        "ru": "Пробный период не подтверждён. Если вы из уже подключённого агентства, попросите у коллег код агентства.",
+        "uz": "Sinov muddati tasdiqlanmadi. Agar agentligingiz allaqachon ulangan bo‘lsa, hamkasblardan agentlik kodini so‘rang.",
+    },
+    "joined": {
+        "ru": "Вы подключены к агентству «{name}».",
+        "uz": "Siz «{name}» agentligiga ulandingiz.",
+    },
+    "seats_full": {
+        "ru": "В агентстве «{name}» заняты все места по тарифу ({limit}). Чтобы добавить сотрудника, свяжитесь с нами{contact}.",
+        "uz": "«{name}» agentligida tarif bo‘yicha barcha o‘rinlar band ({limit}). Xodim qo‘shish uchun biz bilan bog‘laning{contact}.",
+    },
+    "team_info": {
+        "ru": "🏢 {name}\nТариф: {plan}\nСотрудников: {count} из {limit}\nДоступ: {until}\nКод для коллег: {code}\n\n{members}",
+        "uz": "🏢 {name}\nTarif: {plan}\nXodimlar: {count} / {limit}\nKirish: {until}\nHamkasblar uchun kod: {code}\n\n{members}",
+    },
+    "no_team": {"ru": "Вы не состоите в агентстве.", "uz": "Siz agentlikka a’zo emassiz."},
+    "unlimited": {"ru": "без ограничения", "uz": "cheklanmagan"},
+    "until_date": {"ru": "до {date} включительно", "uz": "{date} gacha"},
+    "no_limit_date": {"ru": "без срока", "uz": "muddatsiz"},
+    "menu_team": {"ru": "👥 Моя команда", "uz": "👥 Jamoam"},
     "trial_tomorrow": {
-        "ru": "Завтра, {date}, заканчивается бесплатный пробный период Makon Radar. Чтобы продолжить получать объявления, свяжитесь с нами{contact}.",
-        "uz": "Ertaga, {date}, Makon Radar bepul sinov muddati tugaydi. E’lonlarni olishni davom ettirish uchun biz bilan bog‘laning{contact}.",
+        "ru": "Завтра, {date}, заканчивается доступ вашего агентства к Makon Radar. Чтобы продолжить получать объявления, свяжитесь с нами{contact}.",
+        "uz": "Ertaga, {date}, agentligingizning Makon Radar’dan foydalanish muddati tugaydi. E’lonlarni olishni davom ettirish uchun biz bilan bog‘laning{contact}.",
     },
     "pilot_over": {
-        "ru": "Пилотный период закончился. Свяжитесь с нами, чтобы продолжить.",
-        "uz": "Sinov muddati tugadi. Davom ettirish uchun biz bilan bog‘laning.",
+        "ru": "Доступ вашего агентства закончился. Свяжитесь с нами, чтобы продолжить.",
+        "uz": "Agentligingiz uchun kirish muddati tugadi. Davom ettirish uchun biz bilan bog‘laning.",
     },
     "welcome": {
         "ru": "Здравствуйте! Я присылаю новые объявления о недвижимости в Ташкенте с OLX.uz сразу после публикации.\n\nНастройте фильтры, и я начну присылать подходящие варианты.",
@@ -107,9 +136,10 @@ def district_name(key: str, lang: str) -> str:
 # Команды для кнопки «Меню» слева от поля ввода
 COMMANDS = {
     "ru": [("menu", "Показать меню"), ("filters", "Фильтры"), ("latest", "Последние объявления"),
-           ("export", "Выгрузка в Excel"), ("pause", "Пауза / включить рассылку"), ("lang", "Язык"),
+           ("export", "Выгрузка в Excel"), ("pause", "Пауза / включить рассылку"), ("team", "Моя команда"),
+           ("lang", "Язык"),
            ("start", "Начать заново")],
     "uz": [("menu", "Menyuni ko‘rsatish"), ("filters", "Filtrlar"), ("latest", "So‘nggi e’lonlar"),
-           ("export", "Excelga yuklash"), ("pause", "To‘xtatish / yoqish"), ("lang", "Til"),
+           ("export", "Excelga yuklash"), ("pause", "To‘xtatish / yoqish"), ("team", "Jamoam"), ("lang", "Til"),
            ("start", "Qaytadan boshlash")],
 }

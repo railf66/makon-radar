@@ -10,7 +10,7 @@ from .db import db
 from .filters import matches
 from .olx import fetch_all
 from .sender import send_listing
-from .handlers import contact_suffix, fmt_date, trial_over
+from .handlers import agency_over, contact_suffix, fmt_date, trial_over
 from .i18n import t
 
 log = logging.getLogger(__name__)
@@ -57,25 +57,27 @@ async def poll_once(bot: Bot, notify: bool = True) -> int:
 
 
 async def check_trials(bot: Bot):
-    """За день до конца предупреждаем агента и админа; в день окончания сообщаем админу."""
+    """Срок общий на агентство. За день до конца предупреждаем сотрудников и админа,
+    в день окончания сообщаем админу."""
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
-    for user in await db.authorized_users():
-        until = user.get("trial_until")
-        if not until or user["id"] in config.admin_ids:
+    for agency in await db.agencies():
+        until = agency.get("until")
+        if not until:
             continue
-        if until == tomorrow and user["trial_warned"] < 1:
-            try:
-                await bot.send_message(user["id"], t("trial_tomorrow", user["lang"]).format(
-                    date=fmt_date(until), contact=contact_suffix()))
-            except Exception:
-                log.warning("Не смог предупредить %s", user["id"])
-            await notify_admins(bot, f"⏰ У {user['name']} (id {user['id']}) пробный период заканчивается завтра, {fmt_date(until)}.\n"
-                                     f"Продлить: /extend {user['id']} 30")
-            await db.update_user(user["id"], trial_warned=1)
-        elif trial_over(user) and user["trial_warned"] < 2:
-            await notify_admins(bot, f"⛔ У {user['name']} (id {user['id']}) закончился пробный период. "
-                                     f"Продлить: /extend {user['id']} 30")
-            await db.update_user(user["id"], trial_warned=2)
+        if until == tomorrow and agency["warned"] < 1:
+            for user in await db.agency_members(agency["id"]):
+                try:
+                    await bot.send_message(user["id"], t("trial_tomorrow", user["lang"]).format(
+                        date=fmt_date(until), contact=contact_suffix()))
+                except Exception:
+                    log.warning("Не смог предупредить %s", user["id"])
+            await notify_admins(bot, f"⏰ У агентства «{agency['name']}» (№{agency['id']}) доступ заканчивается завтра, "
+                                     f"{fmt_date(until)}.\nПродлить: /extend {agency['id']} 30")
+            await db.update_agency(agency["id"], warned=1)
+        elif agency_over(agency) and agency["warned"] < 2:
+            await notify_admins(bot, f"⛔ У агентства «{agency['name']}» (№{agency['id']}) закончился доступ. "
+                                     f"Продлить: /extend {agency['id']} 30")
+            await db.update_agency(agency["id"], warned=2)
 
 
 async def poll_loop(bot: Bot):
