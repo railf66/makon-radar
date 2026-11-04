@@ -10,7 +10,7 @@ from .db import db
 from .filters import matches
 from .olx import fetch_all
 from .sender import send_listing
-from .handlers import agency_over, contact_suffix, fmt_date, trial_over
+from .handlers import agency_over, contact_suffix, fmt_date, plans_info, trial_over
 from .i18n import t
 
 log = logging.getLogger(__name__)
@@ -69,6 +69,7 @@ async def check_trials(bot: Bot):
                 try:
                     await bot.send_message(user["id"], t("trial_tomorrow", user["lang"]).format(
                         date=fmt_date(until), contact=contact_suffix()))
+                    await bot.send_message(user["id"], plans_info(user["lang"]))
                 except Exception:
                     log.warning("Не смог предупредить %s", user["id"])
             await notify_admins(bot, f"⏰ У агентства «{agency['name']}» (№{agency['id']}) доступ заканчивается завтра, "

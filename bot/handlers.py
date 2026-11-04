@@ -39,7 +39,8 @@ def main_kb(user):
     return ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True, keyboard=[
         [KeyboardButton(text=t("menu_filters", lang)), KeyboardButton(text=t("menu_latest", lang))],
         [KeyboardButton(text=t("menu_export", lang)), KeyboardButton(text=pause)],
-        [KeyboardButton(text=t("menu_team", lang)), KeyboardButton(text=t("menu_lang", lang))],
+        [KeyboardButton(text=t("menu_team", lang)), KeyboardButton(text=t("menu_plans", lang))],
+        [KeyboardButton(text=t("menu_lang", lang))],
     ])
 
 
@@ -96,6 +97,26 @@ def trial_over(user: dict) -> bool:
 
 
 PLAN_NAMES = {"trial": "пробный", "light": "Light", "pro": "Pro"}
+
+
+def plan_seats(seats: int, lang: str) -> str:
+    return t("plan_seats", lang).format(n=seats) if seats else t("plan_unlimited", lang)
+
+
+def plans_info(lang: str) -> str:
+    """Описание тарифов для агентов: сколько сотрудников, цена, что входит."""
+    price = lambda p: f" — {p}" if p else ""
+    lines = [t("plans_title", lang), "",
+             f"• Light — {plan_seats(config.light_seats, lang)}{price(config.light_price)}",
+             f"• Pro — {plan_seats(config.pro_seats, lang)}{price(config.pro_price)}"]
+    if config.light_seats or config.pro_seats:
+        lines.append(f"• {t('plan_extra', lang)} — {config.seat_price or t('by_agreement', lang)}")
+    lines += ["", t("plans_same", lang), "", t("plans_contact", lang).format(contact=contact_suffix())]
+    return "\n".join(lines)
+
+
+def plans_kb(lang: str):
+    return InlineKeyboardMarkup(inline_keyboard=[[btn(t("menu_plans", lang), "plans")]])
 
 
 def seats_text(agency: dict, count: int) -> str:
@@ -178,6 +199,7 @@ async def check_code(msg: Message, state: FSMContext):
         limit = config.seat_limit(agency)
         if limit and len(await db.agency_members(agency["id"])) >= limit:
             await msg.answer(t("seats_full", lang).format(name=agency["name"], limit=limit, contact=contact_suffix()))
+            await msg.answer(plans_info(lang))
             from .scheduler import notify_admins
             await notify_admins(msg.bot, f"💺 {msg.from_user.full_name} (id {msg.from_user.id}) хочет в агентство "
                                          f"«{agency['name']}», но места кончились ({limit}).\n"
@@ -253,6 +275,7 @@ async def authorized_user(user_id: int, answer):
         return None
     if trial_over(user):
         await answer(t("pilot_over", user["lang"]) + contact_suffix())
+        await answer(plans_info(user["lang"]))
         return None
     return user
 
@@ -437,7 +460,21 @@ async def team(msg: Message):
     await msg.answer(t("team_info", lang).format(
         name=a["name"], plan=PLAN_NAMES.get(a["plan"], a["plan"]) if lang == "ru" else a["plan"].capitalize(),
         count=len(members), limit=limit or t("unlimited", lang), until=until, code=a["code"],
-        members="\n".join(f"• {m['name']}" for m in members)))
+        members="\n".join(f"• {m['name']}" for m in members)), reply_markup=plans_kb(lang))
+
+
+@router.message(Command("tariffs"))
+@router.message(F.text.in_(menu_texts("menu_plans")))
+async def tariffs(msg: Message):
+    user = await db.get_user(msg.from_user.id)
+    await msg.answer(plans_info(user["lang"] if user else "ru"))
+
+
+@router.callback_query(F.data == "plans")
+async def tariffs_cb(cb: CallbackQuery):
+    user = await db.get_user(cb.from_user.id)
+    await cb.message.answer(plans_info(user["lang"] if user else "ru"))
+    await cb.answer()
 
 
 # --- админ: агентства, тарифы и продление ---
@@ -541,6 +578,16 @@ async def set_plan(msg: Message):
     if (limit := config.seat_limit(a)) and count > limit:
         note = f"\n⚠️ Сотрудников уже {count}, а мест {limit}. Новых бот не пустит, лишних отключите через /remove ID."
     await msg.answer(f"Готово: «{a['name']}» — {PLAN_NAMES[a['plan']]}, сотрудников {seats_text(a, count)}.{note}")
+    if a["plan"] != "trial":
+        for m in await db.agency_members(a["id"]):
+            lang = m["lang"]
+            until = t("until_date", lang).format(date=fmt_date(a["until"])) if a.get("until") else t("no_limit_date", lang)
+            seats = plan_seats(config.seat_limit(a) or 0, lang)
+            try:
+                await msg.bot.send_message(m["id"], t("plan_changed", lang).format(
+                    name=a["name"], plan=PLAN_NAMES[a["plan"]], seats=seats, until=until))
+            except Exception:
+                pass
 
 
 @router.message(Command("move"))

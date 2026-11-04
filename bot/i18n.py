@@ -59,6 +59,24 @@ T = {
     "unlimited": {"ru": "без ограничения", "uz": "cheklanmagan"},
     "until_date": {"ru": "до {date} включительно", "uz": "{date} gacha"},
     "no_limit_date": {"ru": "без срока", "uz": "muddatsiz"},
+    "plans_title": {"ru": "💳 Тарифы Makon Radar", "uz": "💳 Makon Radar tariflari"},
+    "plan_seats": {"ru": "до {n} сотрудников", "uz": "{n} tagacha xodim"},
+    "plan_unlimited": {"ru": "без ограничения сотрудников", "uz": "xodimlar soni cheklanmagan"},
+    "plan_extra": {"ru": "Дополнительный сотрудник сверх тарифа", "uz": "Tarifdan tashqari qo‘shimcha xodim"},
+    "plans_same": {
+        "ru": "Функции во всех тарифах одинаковые: новые объявления с OLX сразу после публикации, фильтры по сделке, типу, комнатам, цене и районам, отметка собственник/посредник, выгрузка в Excel. Тарифы отличаются только числом сотрудников.",
+        "uz": "Barcha tariflarda imkoniyatlar bir xil: OLX’dagi yangi e’lonlar joylangan zahoti, bitim, tur, xonalar, narx va tumanlar bo‘yicha filtrlar, egasi/vositachi belgisi, Excelga yuklash. Tariflar faqat xodimlar soni bilan farq qiladi.",
+    },
+    "plans_contact": {
+        "ru": "Подключить или сменить тариф: свяжитесь с нами{contact}.",
+        "uz": "Tarifni ulash yoki o‘zgartirish uchun biz bilan bog‘laning{contact}.",
+    },
+    "plan_changed": {
+        "ru": "Ваше агентство «{name}» переведено на тариф {plan}: {seats}. Доступ {until}.",
+        "uz": "«{name}» agentligingiz {plan} tarifiga o‘tkazildi: {seats}. Kirish {until}.",
+    },
+    "by_agreement": {"ru": "доплата по договорённости", "uz": "qo‘shimcha to‘lov kelishuv asosida"},
+    "menu_plans": {"ru": "💳 Тарифы", "uz": "💳 Tariflar"},
     "menu_team": {"ru": "👥 Моя команда", "uz": "👥 Jamoam"},
     "trial_tomorrow": {
         "ru": "Завтра, {date}, заканчивается доступ вашего агентства к Makon Radar. Чтобы продолжить получать объявления, свяжитесь с нами{contact}.",
@@ -137,9 +155,10 @@ def district_name(key: str, lang: str) -> str:
 COMMANDS = {
     "ru": [("menu", "Показать меню"), ("filters", "Фильтры"), ("latest", "Последние объявления"),
            ("export", "Выгрузка в Excel"), ("pause", "Пауза / включить рассылку"), ("team", "Моя команда"),
+           ("tariffs", "Тарифы"),
            ("lang", "Язык"),
            ("start", "Начать заново")],
     "uz": [("menu", "Menyuni ko‘rsatish"), ("filters", "Filtrlar"), ("latest", "So‘nggi e’lonlar"),
-           ("export", "Excelga yuklash"), ("pause", "To‘xtatish / yoqish"), ("team", "Jamoam"), ("lang", "Til"),
+           ("export", "Excelga yuklash"), ("pause", "To‘xtatish / yoqish"), ("team", "Jamoam"), ("tariffs", "Tariflar"), ("lang", "Til"),
            ("start", "Qaytadan boshlash")],
 }

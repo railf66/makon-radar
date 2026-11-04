@@ -38,6 +38,10 @@ class Config:
     trial_seats: int = int(os.getenv("TRIAL_SEATS", "0"))
     light_seats: int = int(os.getenv("LIGHT_SEATS", "2"))
     pro_seats: int = int(os.getenv("PRO_SEATS", "10"))
+    # Цены для описания тарифов в боте, как есть (например «300 000 сум/мес»). Пусто = цену не показываем
+    light_price: str = os.getenv("LIGHT_PRICE", "")
+    pro_price: str = os.getenv("PRO_PRICE", "")
+    seat_price: str = os.getenv("SEAT_PRICE", "")
     # Кому писать, чтобы продолжить после пробного периода (например @username или телефон)
     contact: str = os.getenv("CONTACT", "")
     olx_enabled: bool = os.getenv("OLX_ENABLED", "1") == "1"
