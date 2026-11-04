@@ -161,6 +161,15 @@ T = {
               "O‘tkazgandan so‘ng «To‘ladim» tugmasini bosing. Tushumni tekshirib, tarifni yoqamiz, odatda bir soat ichida.",
     },
     "paid_btn": {"ru": "✅ Я оплатил", "uz": "✅ To‘ladim"},
+    "click_btn": {"ru": "💙 Оплатить через Click", "uz": "💙 Click orqali to‘lash"},
+    "click_info": {
+        "ru": "\n\nИли через Click: нажмите кнопку «Оплатить через Click» и введите сумму <b>{amount} сум</b>, потом тоже нажмите «Я оплатил».",
+        "uz": "\n\nYoki Click orqali: «Click orqali to‘lash» tugmasini bosing va <b>{amount} so‘m</b> summasini kiriting, so‘ng «To‘ladim» tugmasini bosing.",
+    },
+    "click_ussd": {
+        "ru": "\nБез интернета: наберите <code>{ussd}</code>",
+        "uz": "\nInternetsiz: <code>{ussd}</code> ni tering",
+    },
     "other_tariff_btn": {"ru": "⬅️ Другой тариф", "uz": "⬅️ Boshqa tarif"},
     "pay_sent": {
         "ru": "Спасибо! Проверяем оплату. Как только подтвердим, я напишу и включу тариф.",

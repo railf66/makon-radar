@@ -62,6 +62,9 @@ class Config:
     price_pro: int = int(os.getenv("PRICE_PRO", "500000"))
     pay_card: str = os.getenv("PAY_CARD", "")
     pay_card_owner: str = os.getenv("PAY_CARD_OWNER", "")
+    # Оплата через Click по QR: ссылка из QR-кода кабинета Click и USSD-номер (пусто = не показываем)
+    click_url: str = os.getenv("CLICK_URL", "https://indoor.click.uz/pay?id=0114811&t=0")
+    click_ussd: str = os.getenv("CLICK_USSD", "*880*0114811*{amount}#")
     paid_days: int = int(os.getenv("PAID_DAYS", "30"))
     # За сколько дней до конца срока напоминать об оплате
     warn_days: int = int(os.getenv("WARN_DAYS", "3"))

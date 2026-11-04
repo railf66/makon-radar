@@ -710,8 +710,14 @@ async def choose_tariff(cb: CallbackQuery):
     owner = f"\n{config.pay_card_owner}" if config.pay_card_owner else ""
     text = t("pay_info", lang).format(level=t(f"level_{level}", lang), amount=money(config.price(level)),
                                       days=config.paid_days, card=config.pay_card, owner=owner)
-    kb = InlineKeyboardMarkup(inline_keyboard=[[btn(t("paid_btn", lang), f"paid:{level}")],
-                                               [btn(t("other_tariff_btn", lang), "tariff")]])
+    rows = [[btn(t("paid_btn", lang), f"paid:{level}")], [btn(t("other_tariff_btn", lang), "tariff")]]
+    if config.click_url:
+        rows.insert(0, [InlineKeyboardButton(text=t("click_btn", lang), url=config.click_url)])
+        text += t("click_info", lang).format(amount=money(config.price(level)))
+        if config.click_ussd:
+            ussd = config.click_ussd.format(amount=config.price(level))
+            text += t("click_ussd", lang).format(ussd=ussd)
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
     await cb.message.answer(text, parse_mode="HTML", reply_markup=kb)
     await cb.answer()
 
