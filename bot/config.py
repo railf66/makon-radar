@@ -37,7 +37,7 @@ class Config:
     # Сверх этого админ добавляет платные места: /plan ID light 1
     trial_seats: int = int(os.getenv("TRIAL_SEATS", "0"))
     light_seats: int = int(os.getenv("LIGHT_SEATS", "2"))
-    pro_seats: int = int(os.getenv("PRO_SEATS", "0"))
+    pro_seats: int = int(os.getenv("PRO_SEATS", "10"))
     # Кому писать, чтобы продолжить после пробного периода (например @username или телефон)
     contact: str = os.getenv("CONTACT", "")
     olx_enabled: bool = os.getenv("OLX_ENABLED", "1") == "1"
