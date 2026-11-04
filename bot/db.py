@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS agencies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
-    plan TEXT DEFAULT 'trial',      -- trial | light | pro
+    plan TEXT,                      -- lite | standard | pro, пусто = пробный период
     extra_seats INTEGER DEFAULT 0,  -- докупленные места сверх тарифа
     until TEXT,                     -- последний день доступа, NULL = без срока
     warned INTEGER DEFAULT 0,       -- 0 — нет, 1 — предупредили за день, 2 — срок вышел
@@ -91,6 +91,10 @@ class DB:
         if "trial_warned" not in cols:
             # 0 — не предупреждали, 1 — предупредили за день, 2 — сообщили, что срок вышел
             await self.conn.execute("ALTER TABLE users ADD COLUMN trial_warned INTEGER DEFAULT 0")
+        # Тарифы: level — lite | standard | pro (пусто = пробный период, работает как Стандарт)
+        for col in ("level", "pending_level", "last_digest"):
+            if col not in cols:
+                await self.conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         if "pending" not in cols:
             # 1 — ввёл код с визитки и ждёт одобрения пробного периода админом
             await self.conn.execute("ALTER TABLE users ADD COLUMN pending INTEGER DEFAULT 0")
@@ -103,7 +107,8 @@ class DB:
         for u in await cur.fetchall():
             if u["id"] in config.admin_ids:
                 continue
-            agency_id = await self._insert_agency(u["name"], u["trial_until"], u["trial_warned"] or 0)
+            agency_id = await self._insert_agency(u["name"], u["trial_until"], u["trial_warned"] or 0,
+                                                  plan=u["level"])
             await self.conn.execute("UPDATE users SET agency_id=? WHERE id=?", (agency_id, u["id"]))
 
     async def close(self):
@@ -153,10 +158,10 @@ class DB:
             if not await cur.fetchone():
                 return code
 
-    async def _insert_agency(self, name: str, until: str | None, warned: int = 0) -> int:
+    async def _insert_agency(self, name: str, until: str | None, warned: int = 0, plan: str | None = None) -> int:
         cur = await self.conn.execute(
-            "INSERT INTO agencies (name, until, warned, code, created_at) VALUES (?,?,?,?,?)",
-            (name, until, warned, await self._new_code(), now()),
+            "INSERT INTO agencies (name, plan, until, warned, code, created_at) VALUES (?,?,?,?,?,?)",
+            (name, plan, until, warned, await self._new_code(), now()),
         )
         return cur.lastrowid
 
@@ -238,6 +243,45 @@ class DB:
             (since, limit),
         )
         return [dict(r) for r in await cur.fetchall()]
+
+    async def listings_since(self, since: str, limit: int = 500):
+        cur = await self.conn.execute(
+            "SELECT * FROM listings WHERE first_seen>? ORDER BY first_seen LIMIT ?", (since, limit)
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+    async def median_ppm(self, item: dict, days: int = 30) -> tuple[float | None, int]:
+        """Медианная цена за м² для такой же сделки, типа и района за последние дни."""
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        cur = await self.conn.execute(
+            """SELECT price_usd / area FROM listings
+            WHERE deal=? AND ptype=? AND district=? AND id<>? AND first_seen>=?
+              AND price_usd > 0 AND area > 0 LIMIT 1000""",
+            (item["deal"], item["ptype"], item["district"], item["id"], since),
+        )
+        values = sorted(r[0] for r in await cur.fetchall())
+        if not values:
+            return None, 0
+        mid = len(values) // 2
+        median = values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+        return median, len(values)
+
+    async def is_duplicate(self, item: dict, days: int = 14) -> bool:
+        """Тот же объект, выложенный заново: совпадают сделка, тип, район, комнаты, площадь и цена."""
+        if not (item.get("area") and item.get("price_usd") and item.get("district")):
+            return False
+        now_ = datetime.now(timezone.utc)
+        since = (now_ - timedelta(days=days)).isoformat()
+        # Сравниваем только с объявлениями из прошлых проверок, а не с соседями по текущей
+        before = (now_ - timedelta(minutes=5)).isoformat()
+        cur = await self.conn.execute(
+            """SELECT 1 FROM listings WHERE id<>? AND deal=? AND ptype=? AND district=?
+              AND IFNULL(rooms, 0)=IFNULL(?, 0) AND ABS(area-?)<0.6 AND ABS(price_usd-?)<1
+              AND first_seen>=? AND first_seen<? LIMIT 1""",
+            (item["id"], item["deal"], item["ptype"], item["district"], item.get("rooms"),
+             item["area"], item["price_usd"], since, before),
+        )
+        return await cur.fetchone() is not None
 
     async def mark_sent(self, user_id: int, listing_id: str) -> bool:
         cur = await self.conn.execute(
