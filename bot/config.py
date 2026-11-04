@@ -31,6 +31,14 @@ class Config:
     )
     # Пробный период для каждого агента: столько дней с момента ввода кода
     trial_days: int = int(os.getenv("TRIAL_DAYS", "14"))
+    # 1 = пробный период по коду с визитки включается только после одобрения админом
+    trial_approval: bool = os.getenv("TRIAL_APPROVAL", "1") == "1"
+    # Сколько сотрудников входит в тариф агентства. 0 = без ограничения.
+    # Сверх этого админ добавляет платные места: /plan №А lite 1
+    trial_seats: int = int(os.getenv("TRIAL_SEATS", "0"))
+    lite_seats: int = int(os.getenv("LITE_SEATS", "2"))
+    standard_seats: int = int(os.getenv("STANDARD_SEATS", "5"))
+    pro_seats: int = int(os.getenv("PRO_SEATS", "10"))
     # Кому писать, чтобы продолжить после пробного периода (например @username или телефон)
     contact: str = os.getenv("CONTACT", "")
     olx_enabled: bool = os.getenv("OLX_ENABLED", "1") == "1"
@@ -48,11 +56,40 @@ class Config:
     # Как часто проверять, не сняты ли с OLX объекты Дильнозы, в часах
     dilnoza_check_hours: int = int(os.getenv("DILNOZA_CHECK_HOURS", "24"))
 
+    # --- Тарифы Makon Radar и оплата переводом на карту ---
+    price_lite: int = int(os.getenv("PRICE_LITE", "150000"))
+    price_standard: int = int(os.getenv("PRICE_STANDARD", "300000"))
+    price_pro: int = int(os.getenv("PRICE_PRO", "500000"))
+    pay_card: str = os.getenv("PAY_CARD", "")
+    pay_card_owner: str = os.getenv("PAY_CARD_OWNER", "")
+    paid_days: int = int(os.getenv("PAID_DAYS", "30"))
+    # За сколько дней до конца срока напоминать об оплате
+    warn_days: int = int(os.getenv("WARN_DAYS", "3"))
+    # Лайт: сколько районов можно выбрать и как часто присылать подборку (минуты)
+    lite_max_districts: int = int(os.getenv("LITE_MAX_DISTRICTS", "3"))
+    lite_digest_minutes: int = int(os.getenv("LITE_DIGEST_MIN", "60"))
+    # Вебхук Make, который записывает оплаты в таблицу «Makon Radar — подписчики»
+    subs_webhook: str = os.getenv("SUBS_WEBHOOK", "")
+
+    def seats(self, level: str | None) -> int:
+        """Мест по тарифу (без доп. мест). 0 = без ограничения. None = пробный период."""
+        return {"lite": self.lite_seats, "standard": self.standard_seats, "pro": self.pro_seats}.get(level, self.trial_seats)
+
+    def seat_limit(self, agency: dict) -> int | None:
+        """Сколько сотрудников можно в агентстве; None = без ограничения."""
+        base = self.seats(agency.get("plan"))
+        return None if base == 0 else base + (agency.get("extra_seats") or 0)
+
+    def price(self, level: str) -> int:
+        return {"lite": self.price_lite, "standard": self.price_standard, "pro": self.price_pro}[level]
+
     def can_dilnoza(self, user_id: int) -> bool:
         return bool(self.dilnoza_webhook) and user_id in (self.dilnoza_users or self.admin_ids)
 
 
 config = Config()
+
+LEVELS = ("lite", "standard", "pro")
 
 # Разделы OLX.uz, которые собираем (id сверены с olx.uz 2026-10-27).
 OLX_BASE = "https://www.olx.uz"

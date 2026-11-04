@@ -9,7 +9,8 @@ from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardButto
                            InlineKeyboardMarkup, KeyboardButton, Message,
                            ReplyKeyboardMarkup)
 
-from .config import config
+from .billing import level_name, log_payment, money, new_until, user_level
+from .config import LEVELS, config
 from .db import db
 from .dilnoza import push_listing
 from .export import build_excel
@@ -39,6 +40,7 @@ def main_kb(user):
     return ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True, keyboard=[
         [KeyboardButton(text=t("menu_filters", lang)), KeyboardButton(text=t("menu_latest", lang))],
         [KeyboardButton(text=t("menu_export", lang)), KeyboardButton(text=pause)],
+        [KeyboardButton(text=t("menu_team", lang)), KeyboardButton(text=t("menu_tariff", lang))],
         [KeyboardButton(text=t("menu_lang", lang))],
     ])
 
@@ -80,11 +82,44 @@ def menu_texts(key):
     return set(T[key].values())
 
 
+def agency_over(agency: dict) -> bool:
+    return bool(agency.get("until")) and date.today() > date.fromisoformat(agency["until"])
+
+
 def trial_over(user: dict) -> bool:
-    """У каждого агента свой срок; админы без ограничений."""
-    if user["id"] in config.admin_ids or not user.get("trial_until"):
+    """Срок общий на агентство; админы без ограничений."""
+    if user["id"] in config.admin_ids:
+        return False
+    if user.get("agency"):
+        return agency_over(user["agency"])
+    if not user.get("trial_until"):
         return False
     return date.today() > date.fromisoformat(user["trial_until"])
+
+
+def plan_name(plan: str | None, lang: str = "ru") -> str:
+    return level_name(plan if plan in LEVELS else None, lang)
+
+
+def plan_seats(seats: int, lang: str) -> str:
+    return t("plan_seats", lang).format(n=seats) if seats else t("plan_unlimited", lang)
+
+
+def tariff_btn_kb(lang: str):
+    return InlineKeyboardMarkup(inline_keyboard=[[btn(t("choose_tariff_btn", lang), "tariff")]])
+
+
+def seats_text(agency: dict, count: int) -> str:
+    limit = config.seat_limit(agency)
+    return f"{count}/{limit}" if limit else f"{count}/∞"
+
+
+def agency_line(a: dict, count: int) -> str:
+    until = f"до {fmt_date(a['until'])}" if a.get("until") else "без срока"
+    mark_ = "⛔" if agency_over(a) else "✅"
+    extra = f" +{a['extra_seats']} мест" if a.get("extra_seats") else ""
+    return (f"{mark_} 🏢 {a['name']} — №{a['id']} — {plan_name(a['plan'])}{extra}, "
+            f"сотрудников {seats_text(a, count)}, {until}, код {a['code']}")
 
 
 def contact_suffix() -> str:
@@ -112,9 +147,13 @@ async def set_lang(cb: CallbackQuery, state: FSMContext):
     user = await db.get_user(cb.from_user.id)
     await cb.message.delete()
     if not user["authorized"]:
+        if user.get("pending"):
+            await cb.message.answer(t("trial_pending", lang))
+            return
         if config.access_code:
             await state.set_state(S.code)
-            await cb.message.answer(t("need_code", lang))
+            await cb.message.answer(t("need_code", lang), reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[btn(t("choose_tariff_btn", lang), "tariff")]]))
             return
         await db.update_user(cb.from_user.id, authorized=1)
         user = await db.get_user(cb.from_user.id)
@@ -125,23 +164,103 @@ async def set_lang(cb: CallbackQuery, state: FSMContext):
 @router.message(S.code)
 async def check_code(msg: Message, state: FSMContext):
     user = await db.get_user(msg.from_user.id)
+    if user and user["authorized"]:  # уже подключён (например, оплатил тариф без кода)
+        await state.clear()
+        await msg.answer(t("welcome", user["lang"]), reply_markup=main_kb(user))
+        return
     text = (msg.text or "").strip()
     if text.startswith("/"):
         await msg.answer(t("code_first", user["lang"]))
         return
-    if text.lower() != config.access_code.lower():
-        await msg.answer(t("bad_code", user["lang"]))
-        return
+    lang = user["lang"]
+    is_admin = msg.from_user.id in config.admin_ids
+    if config.access_code and text.lower() == config.access_code.lower():
+        if not is_admin and config.trial_approval:
+            # Код с визитки: пробный период только после одобрения админом,
+            # чтобы сотрудники одного агентства не брали пробные периоды по очереди
+            await state.clear()
+            await db.update_user(msg.from_user.id, pending=1)
+            await msg.answer(t("trial_pending", lang))
+            await ask_approval(msg.bot, msg.from_user)
+            return
+        # Новое агентство с пробным периодом, этот человек в нём первый
+        until = None if is_admin else (date.today() + timedelta(days=config.trial_days)).isoformat()
+        agency = None if is_admin else await db.create_agency(msg.from_user.full_name, until)
+    else:
+        agency = await db.agency_by_code(text)
+        if not agency:
+            await msg.answer(t("bad_code", lang))
+            return
+        limit = config.seat_limit(agency)
+        if limit and len(await db.agency_members(agency["id"])) >= limit:
+            await msg.answer(t("seats_full", lang).format(name=agency["name"], limit=limit, contact=contact_suffix()),
+                             reply_markup=tariff_btn_kb(lang))
+            from .scheduler import notify_admins
+            await notify_admins(msg.bot, f"💺 {msg.from_user.full_name} (id {msg.from_user.id}) хочет в агентство "
+                                         f"«{agency['name']}», но места кончились ({limit}).\n"
+                                         f"Добавить место: /plan {agency['id']} {agency['plan'] or 'trial'} {(agency['extra_seats'] or 0) + 1}")
+            return
     await state.clear()
-    fields = {"authorized": 1, "trial_warned": 0}
-    if msg.from_user.id not in config.admin_ids:
-        fields["trial_until"] = (date.today() + timedelta(days=config.trial_days)).isoformat()
-    await db.update_user(msg.from_user.id, **fields)
+    await db.update_user(msg.from_user.id, authorized=1, trial_warned=0, pending=0,
+                         agency_id=agency["id"] if agency else None)
     user = await db.get_user(msg.from_user.id)
-    if user.get("trial_until"):
-        await msg.answer(t("trial_started", user["lang"]).format(date=fmt_date(user["trial_until"])))
-    await msg.answer(t("welcome", user["lang"]), reply_markup=main_kb(user))
-    await msg.answer(t("filters_title", user["lang"]), reply_markup=filters_kb(user))
+    if agency and agency["code"] == text:
+        await msg.answer(t("joined", lang).format(name=agency["name"]))
+    elif agency:
+        await msg.answer(t("trial_started", lang).format(date=fmt_date(agency["until"])))
+        await msg.answer(t("team_code", lang).format(code=agency["code"]))
+    await msg.answer(t("welcome", lang), reply_markup=main_kb(user))
+    await msg.answer(t("filters_title", lang), reply_markup=filters_kb(user))
+
+
+async def ask_approval(bot, tg_user):
+    who = tg_user.full_name + (f" (@{tg_user.username})" if getattr(tg_user, "username", None) else "")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[btn("✅ Одобрить", f"ap:ok:{tg_user.id}"),
+                                                btn("❌ Отказать", f"ap:no:{tg_user.id}")]])
+    text = (f"🆕 Заявка на пробный период: {who}, id {tg_user.id}.\n"
+            f"Если это сотрудник уже подключённого агентства, жмите «Отказать» "
+            f"или добавьте его туда: /move {tg_user.id} №А (№ в /users).")
+    for admin_id in config.admin_ids:
+        try:
+            await bot.send_message(admin_id, text, reply_markup=kb)
+        except Exception:
+            pass
+
+
+@router.callback_query(F.data.startswith("ap:"))
+async def approval(cb: CallbackQuery):
+    if cb.from_user.id not in config.admin_ids:
+        await cb.answer()
+        return
+    _, action, uid = cb.data.split(":")
+    user = await db.get_user(int(uid))
+    if not user or not user.get("pending"):
+        await cb.answer("Заявка уже обработана", show_alert=True)
+        await cb.message.edit_reply_markup(reply_markup=None)
+        return
+    lang = user["lang"]
+    if action == "ok":
+        until = (date.today() + timedelta(days=config.trial_days)).isoformat()
+        agency = await db.create_agency(user["name"], until)
+        await db.update_user(user["id"], authorized=1, pending=0, trial_warned=0, agency_id=agency["id"])
+        user = await db.get_user(user["id"])
+        result = f"✅ Одобрено: {user['name']}, агентство №{agency['id']}, до {fmt_date(until)}."
+        try:
+            await cb.bot.send_message(user["id"], t("trial_started", lang).format(date=fmt_date(until)))
+            await cb.bot.send_message(user["id"], t("team_code", lang).format(code=agency["code"]))
+            await cb.bot.send_message(user["id"], t("welcome", lang), reply_markup=main_kb(user))
+            await cb.bot.send_message(user["id"], t("filters_title", lang), reply_markup=filters_kb(user))
+        except Exception:
+            result += " Не смог ему написать."
+    else:
+        await db.update_user(user["id"], pending=0)
+        result = f"❌ Отказано: {user['name']}."
+        try:
+            await cb.bot.send_message(user["id"], t("trial_rejected", lang) + (f"\n{config.contact}" if config.contact else ""))
+        except Exception:
+            pass
+    await cb.message.edit_text(cb.message.text + "\n\n" + result)
+    await cb.answer()
 
 
 async def authorized_user(user_id: int, answer):
@@ -150,7 +269,8 @@ async def authorized_user(user_id: int, answer):
         await answer(t("choose_lang", "ru"), reply_markup=lang_kb())
         return None
     if trial_over(user):
-        await answer(t("pilot_over", user["lang"]) + contact_suffix())
+        await answer(t("pilot_over", user["lang"]), reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[btn(t("choose_tariff_btn", user["lang"]), "tariff")]]))
         return None
     return user
 
@@ -170,6 +290,10 @@ async def toggle(cb: CallbackQuery):
     user = await db.get_user(cb.from_user.id)
     value = int(value) if field == "rooms" else value
     values = user["filters"][field]
+    if (field == "districts" and value not in values and user_level(user) == "lite"
+            and len(values) >= config.lite_max_districts):
+        await cb.answer(t("lite_max", user["lang"]), show_alert=True)
+        return
     values.remove(value) if value in values else values.append(value)
     await db.update_user(cb.from_user.id, filters=user["filters"])
     kb = districts_kb(user) if field == "districts" else filters_kb(user)
@@ -261,6 +385,8 @@ async def filters_done(cb: CallbackQuery):
     user = await db.get_user(cb.from_user.id)
     await cb.message.edit_reply_markup(reply_markup=None)
     await cb.message.answer(t("saved", user["lang"]), reply_markup=main_kb(user))
+    if user_level(user) == "lite" and not user["filters"]["districts"]:
+        await cb.message.answer(t("lite_need_district", user["lang"]))
     await cb.answer()
 
 
@@ -319,43 +445,85 @@ async def change_lang(msg: Message):
     await msg.answer(t("choose_lang", "ru"), reply_markup=lang_kb())
 
 
+@router.message(Command("team"))
+@router.message(F.text.in_(menu_texts("menu_team")))
+async def team(msg: Message):
+    user = await authorized_user(msg.from_user.id, msg.answer)
+    if not user:
+        return
+    lang, a = user["lang"], user["agency"]
+    if not a:
+        await msg.answer(t("no_team", lang))
+        return
+    members = await db.agency_members(a["id"])
+    limit = config.seat_limit(a)
+    until = t("until_date", lang).format(date=fmt_date(a["until"])) if a.get("until") else t("no_limit_date", lang)
+    await msg.answer(t("team_info", lang).format(
+        name=a["name"], plan=plan_name(a["plan"], lang),
+        count=len(members), limit=limit or t("unlimited", lang), until=until, code=a["code"],
+        members="\n".join(f"• {m['name']}" for m in members)), reply_markup=tariff_btn_kb(lang))
+
+
+# --- админ: агентства, тарифы и продление ---
+
+def admin(msg: Message) -> bool:
+    return msg.from_user.id in config.admin_ids
+
+
 @router.message(Command("stats"))
 async def stats(msg: Message):
-    if msg.from_user.id not in config.admin_ids:
+    if not admin(msg):
         return
     s = await db.stats()
-    await msg.answer(f"Агентов: {s['users']}\nОбъявлений собрано: {s['listings']}\nОтправлено: {s['sent']}")
+    await msg.answer(f"Агентств: {s['agencies']}\nСотрудников: {s['users']}\n"
+                     f"Объявлений собрано: {s['listings']}\nОтправлено: {s['sent']}")
 
-
-# --- админ: агенты и продление ---
 
 @router.message(Command("users"))
 async def users_list(msg: Message):
-    if msg.from_user.id not in config.admin_ids:
+    if not admin(msg):
         return
-    lines = []
-    for u in await db.authorized_users():
-        if u["id"] in config.admin_ids:
-            continue
-        until = f"до {fmt_date(u['trial_until'])}" if u.get("trial_until") else "без срока"
-        mark_ = "⛔" if trial_over(u) else "✅"
-        lines.append(f"{mark_} {u['name']} — id {u['id']} — {until}")
-    await msg.answer("\n".join(lines) or "Агентов пока нет.")
+    blocks = []
+    for a in await db.agencies():
+        members = await db.agency_members(a["id"])
+        lines = [agency_line(a, len(members))]
+        lines += [f"   • {m['name']} — id {m['id']}" for m in members]
+        blocks.append("\n".join(lines))
+    loose = [u for u in await db.authorized_users() if not u["agency_id"] and u["id"] not in config.admin_ids]
+    if loose:
+        blocks.append("Без агентства:\n" + "\n".join(f"   • {u['name']} — id {u['id']}" for u in loose))
+    text = "\n\n".join(blocks) or "Агентств пока нет."
+    text += ("\n\nКоманды: /extend №А 30 — продлить, /plan №А lite|standard|pro [доп.мест], "
+             "/move ID №А — перенести сотрудника, /rename №А Название, /remove ID — отключить, "
+             "/newagency Название — новое агентство")
+    for i in range(0, len(text), 4000):  # лимит длины сообщения Telegram
+        await msg.answer(text[i:i + 4000])
+
+
+async def find_agency(arg: str):
+    """№ агентства, а если такого нет — Telegram id сотрудника (берём его агентство)."""
+    if not arg.isdigit():
+        return None
+    if a := await db.get_agency(int(arg)):
+        return a
+    user = await db.get_user(int(arg))
+    return user["agency"] if user else None
 
 
 @router.message(Command("extend"))
 async def extend(msg: Message):
-    """/extend ID ДНЕЙ или /extend ID ГГГГ-ММ-ДД или /extend ID 0 (без срока)."""
-    if msg.from_user.id not in config.admin_ids:
+    """/extend №А ДНЕЙ, /extend №А ГГГГ-ММ-ДД или /extend №А 0 (без срока)."""
+    if not admin(msg):
         return
     parts = (msg.text or "").split()
-    usage = "Как продлить: /extend ID ДНЕЙ (например /extend 123456 30) или /extend ID 2026-12-31. /extend ID 0 — без срока. ID есть в /users."
-    if len(parts) != 3 or not parts[1].isdigit():
+    usage = ("Как продлить: /extend №А ДНЕЙ (например /extend 3 30) или /extend 3 2026-12-31. "
+             "/extend 3 0 — без срока. № агентства есть в /users (можно указать и id сотрудника).")
+    if len(parts) != 3:
         await msg.answer(usage)
         return
-    user = await db.get_user(int(parts[1]))
-    if not user:
-        await msg.answer("Нет такого агента. Посмотрите ID в /users.")
+    a = await find_agency(parts[1])
+    if not a:
+        await msg.answer("Нет такого агентства. Посмотрите № в /users.")
         return
     arg = parts[2]
     try:
@@ -368,5 +536,300 @@ async def extend(msg: Message):
     except ValueError:
         await msg.answer(usage)
         return
-    await db.update_user(user["id"], trial_until=until, trial_warned=0, active=1)
-    await msg.answer(f"Готово: {user['name']} — " + (f"до {fmt_date(until)}" if until else "без срока") + ".")
+    await db.update_agency(a["id"], until=until, warned=0)
+    for m in await db.agency_members(a["id"]):
+        await db.update_user(m["id"], active=1)
+    await msg.answer(f"Готово: «{a['name']}» — " + (f"до {fmt_date(until)}" if until else "без срока") + ".")
+
+
+async def trim_lite_districts(agency_id: int):
+    """На Лайте у каждого сотрудника не больше LITE_MAX_DISTRICTS районов."""
+    for m in await db.agency_members(agency_id):
+        f = m["filters"]
+        if len(f["districts"]) > config.lite_max_districts:
+            f["districts"] = f["districts"][:config.lite_max_districts]
+            await db.update_user(m["id"], filters=f)
+        await db.update_user(m["id"], last_digest=None)
+
+
+@router.message(Command("plan"))
+async def set_plan(msg: Message):
+    """/plan №А lite|standard|pro|trial [доп. мест] — тариф агентства без оплаты (срок не меняется)."""
+    if not admin(msg):
+        return
+    parts = (msg.text or "").split()
+    usage = (f"Как сменить тариф: /plan №А lite, /plan №А standard или /plan №А pro (trial — пробный). "
+             f"Доп. места: /plan №А lite 1 (Лайт = {config.lite_seats or '∞'} сотр. + 1). № есть в /users.")
+    plan = {"light": "lite", "лайт": "lite", "стандарт": "standard"}.get(parts[2].lower(), parts[2].lower()) if len(parts) > 2 else ""
+    if len(parts) not in (3, 4) or plan not in LEVELS + ("trial",) or (len(parts) == 4 and not parts[3].isdigit()):
+        await msg.answer(usage)
+        return
+    a = await find_agency(parts[1])
+    if not a:
+        await msg.answer("Нет такого агентства. Посмотрите № в /users.")
+        return
+    extra = int(parts[3]) if len(parts) == 4 else 0
+    await db.update_agency(a["id"], plan=None if plan == "trial" else plan, extra_seats=extra)
+    if plan == "lite":
+        await trim_lite_districts(a["id"])
+    a = await db.get_agency(a["id"])
+    count = len(await db.agency_members(a["id"]))
+    note = ""
+    if (limit := config.seat_limit(a)) and count > limit:
+        note = f"\n⚠️ Сотрудников уже {count}, а мест {limit}. Новых бот не пустит, лишних отключите через /remove ID."
+    await msg.answer(f"Готово: «{a['name']}» — {plan_name(a['plan'])}, сотрудников {seats_text(a, count)}.{note}")
+    if a["plan"]:
+        for m in await db.agency_members(a["id"]):
+            lang = m["lang"]
+            until = t("until_date", lang).format(date=fmt_date(a["until"])) if a.get("until") else t("no_limit_date", lang)
+            seats = plan_seats(config.seat_limit(a) or 0, lang).lower()
+            try:
+                await msg.bot.send_message(m["id"], t("plan_changed", lang).format(
+                    name=a["name"], plan=plan_name(a["plan"], lang), seats=seats, until=until))
+            except Exception:
+                pass
+
+
+@router.message(Command("move"))
+async def move(msg: Message):
+    """/move ID №А — перенести сотрудника в агентство."""
+    if not admin(msg):
+        return
+    parts = (msg.text or "").split()
+    if len(parts) != 3 or not parts[1].isdigit() or not parts[2].isdigit():
+        await msg.answer("Как перенести: /move ID_сотрудника №агентства (например /move 123456789 3). Всё есть в /users.")
+        return
+    user, a = await db.get_user(int(parts[1])), await db.get_agency(int(parts[2]))
+    if not user or not a:
+        await msg.answer("Не нашёл сотрудника или агентство. Посмотрите в /users.")
+        return
+    old = user["agency_id"]
+    await db.update_user(user["id"], agency_id=a["id"], authorized=1, trial_warned=0, pending=0)
+    try:
+        lang = user["lang"]
+        await msg.bot.send_message(user["id"], t("joined", lang).format(name=a["name"]),
+                                   reply_markup=main_kb(await db.get_user(user["id"])))
+    except Exception:
+        pass
+    text = f"Готово: {user['name']} теперь в «{a['name']}»."
+    if old and old != a["id"] and await db.delete_agency_if_empty(old):
+        text += f" Пустое агентство №{old} удалено."
+    count = len(await db.agency_members(a["id"]))
+    if (limit := config.seat_limit(a)) and count > limit:
+        text += f"\n⚠️ Сотрудников {count}, а по тарифу мест {limit}."
+    await msg.answer(text)
+
+
+@router.message(Command("rename"))
+async def rename(msg: Message):
+    if not admin(msg):
+        return
+    parts = (msg.text or "").split(maxsplit=2)
+    if len(parts) != 3 or not parts[1].isdigit() or not (a := await db.get_agency(int(parts[1]))):
+        await msg.answer("Как переименовать: /rename №А Название (например /rename 3 Baht Residence).")
+        return
+    await db.update_agency(a["id"], name=parts[2].strip())
+    await msg.answer(f"Готово: агентство №{a['id']} теперь «{parts[2].strip()}».")
+
+
+@router.message(Command("newagency"))
+async def new_agency(msg: Message):
+    if not admin(msg):
+        return
+    parts = (msg.text or "").split(maxsplit=1)
+    if len(parts) != 2:
+        await msg.answer("Как создать: /newagency Название. Срок пробный, тариф потом через /plan и /extend.")
+        return
+    until = (date.today() + timedelta(days=config.trial_days)).isoformat()
+    a = await db.create_agency(parts[1].strip(), until)
+    await msg.answer(f"Создано агентство №{a['id']} «{a['name']}», до {fmt_date(until)}.\n"
+                     f"Код для сотрудников: {a['code']}")
+
+
+@router.message(Command("remove"))
+async def remove(msg: Message):
+    """/remove ID — отключить сотрудника (освобождает место)."""
+    if not admin(msg):
+        return
+    parts = (msg.text or "").split()
+    if len(parts) != 2 or not parts[1].isdigit() or not (user := await db.get_user(int(parts[1]))):
+        await msg.answer("Как отключить: /remove ID_сотрудника. ID есть в /users.")
+        return
+    await db.update_user(user["id"], authorized=0, agency_id=None)
+    await msg.answer(f"Готово: {user['name']} отключён, место освободилось.")
+
+
+# --- тарифы и оплата переводом на карту ---
+
+def tariff_kb(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [btn(t("tariff_btn", lang).format(level=t(f"level_{lvl}", lang), amount=money(config.price(lvl))), f"pay:{lvl}")]
+        for lvl in LEVELS
+    ])
+
+
+def tariff_text(user: dict) -> str:
+    lang = user["lang"]
+    current = ""
+    a = user.get("agency")
+    if a and a.get("until") and not agency_over(a):
+        current = t("tariff_current", lang).format(level=plan_name(a.get("plan"), lang), date=fmt_date(a["until"]))
+    return t("tariff_title", lang).format(
+        days=config.paid_days, lite=money(config.price_lite), standard=money(config.price_standard),
+        pro=money(config.price_pro), current=current,
+        lite_seats=plan_seats(config.lite_seats, lang), standard_seats=plan_seats(config.standard_seats, lang),
+        pro_seats=plan_seats(config.pro_seats, lang))
+
+
+async def send_tariffs(message: Message, user_id: int, name: str):
+    user = await db.ensure_user(user_id, name)
+    await message.answer(tariff_text(user), parse_mode="HTML", reply_markup=tariff_kb(user["lang"]))
+
+
+@router.message(Command("tariff"))
+@router.message(F.text.in_(menu_texts("menu_tariff")))
+async def show_tariff(msg: Message):
+    await send_tariffs(msg, msg.from_user.id, msg.from_user.full_name)
+
+
+@router.callback_query(F.data == "tariff")
+async def tariff_cb(cb: CallbackQuery):
+    await send_tariffs(cb.message, cb.from_user.id, cb.from_user.full_name)
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("pay:"))
+async def choose_tariff(cb: CallbackQuery):
+    level = cb.data.split(":")[1]
+    if level not in LEVELS:
+        await cb.answer()
+        return
+    user = await db.ensure_user(cb.from_user.id, cb.from_user.full_name)
+    lang = user["lang"]
+    await db.update_user(cb.from_user.id, pending_level=level)
+    owner = f"\n{config.pay_card_owner}" if config.pay_card_owner else ""
+    text = t("pay_info", lang).format(level=t(f"level_{level}", lang), amount=money(config.price(level)),
+                                      days=config.paid_days, card=config.pay_card, owner=owner)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[btn(t("paid_btn", lang), f"paid:{level}")],
+                                               [btn(t("other_tariff_btn", lang), "tariff")]])
+    await cb.message.answer(text, parse_mode="HTML", reply_markup=kb)
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("paid:"))
+async def i_paid(cb: CallbackQuery):
+    level = cb.data.split(":")[1]
+    if level not in LEVELS:
+        await cb.answer()
+        return
+    user = await db.ensure_user(cb.from_user.id, cb.from_user.full_name)
+    await db.update_user(cb.from_user.id, pending_level=level)
+    try:
+        await cb.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await cb.message.answer(t("pay_sent", user["lang"]))
+    uname = f" (@{cb.from_user.username})" if cb.from_user.username else ""
+    text = (f"💳 Оплата на проверку\n{user['name']}{uname}, id {user['id']}\n"
+            f"Тариф: {t(f'level_{level}', 'ru')}, {money(config.price(level))} сум\n"
+            + (f"Агентство: «{user['agency']['name']}» №{user['agency']['id']}, сейчас "
+               f"{plan_name(user['agency']['plan'])}"
+               + (f", до {fmt_date(user['agency']['until'])}" if user['agency'].get("until") else "")
+               if user.get("agency") else "Агентства пока нет, после подтверждения создам новое")
+            + "\n\nПроверьте поступление на карту и нажмите кнопку.")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[btn("✅ Подтвердить", f"payok:{user['id']}:{level}"),
+                                                btn("❌ Отклонить", f"payno:{user['id']}:{level}")]])
+    for admin_id in config.admin_ids:
+        try:
+            await cb.bot.send_message(admin_id, text, reply_markup=kb)
+        except Exception:
+            pass
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("payok:") | F.data.startswith("payno:"))
+async def admin_decision(cb: CallbackQuery):
+    if cb.from_user.id not in config.admin_ids:
+        await cb.answer()
+        return
+    action, uid, level = cb.data.split(":")
+    user = await db.get_user(int(uid))
+    if not user or level not in LEVELS:
+        await cb.answer("Пользователь не найден", show_alert=True)
+        return
+    lang = user["lang"]
+    username = None
+    try:
+        chat = await cb.bot.get_chat(user["id"])
+        username = chat.username
+    except Exception:
+        pass
+    if action == "payok":
+        agency = user.get("agency")
+        if not agency:  # оплатил без кода: заводим ему агентство
+            agency = await db.create_agency(user["name"], None)
+        until = new_until(agency)
+        await db.update_agency(agency["id"], plan=level, until=until, warned=0)
+        await db.update_user(user["id"], authorized=1, active=1, pending=0, trial_warned=0,
+                             pending_level=None, agency_id=agency["id"])
+        if level == "lite":
+            await trim_lite_districts(agency["id"])
+        else:
+            for m in await db.agency_members(agency["id"]):
+                await db.update_user(m["id"], last_digest=None)
+        user = await db.get_user(user["id"])
+        text = t("pay_confirmed", lang).format(level=t(f"level_{level}", lang), date=fmt_date(until))
+        if level == "lite":
+            text += t("pay_confirmed_lite", lang)
+        try:
+            await cb.bot.send_message(user["id"], text, reply_markup=main_kb(user))
+            if not agency.get("plan") and agency.get("code"):
+                await cb.bot.send_message(user["id"], t("team_code", lang).format(code=user["agency"]["code"]))
+        except Exception:
+            pass
+        # остальным сотрудникам — что тариф агентства сменился
+        for m in await db.agency_members(agency["id"]):
+            if m["id"] == user["id"]:
+                continue
+            ml = m["lang"]
+            try:
+                await cb.bot.send_message(m["id"], t("plan_changed", ml).format(
+                    name=agency["name"], plan=t(f"level_{level}", ml),
+                    seats=plan_seats(config.seat_limit(user["agency"]) or 0, ml).lower(),
+                    until=t("until_date", ml).format(date=fmt_date(until))))
+            except Exception:
+                pass
+        saved = await log_payment(user, level, "оплачен", until, username)
+        result = f"✅ Подтверждено: «{user['agency']['name']}» — {t(f'level_{level}', 'ru')} до {fmt_date(until)}" + ("" if saved else " (в таблицу не записалось)")
+    else:
+        await db.update_user(user["id"], pending_level=None)
+        try:
+            await cb.bot.send_message(user["id"], t("pay_rejected", lang).format(contact=contact_suffix()))
+        except Exception:
+            pass
+        await log_payment(user, level, "отклонён", None, username)
+        result = "❌ Отклонено"
+    try:
+        await cb.message.edit_text(f"{cb.message.text}\n\n{result}", reply_markup=None)
+    except Exception:
+        pass
+    await cb.answer(result[:200])
+
+
+@router.message(Command("level"))
+async def set_level(msg: Message):
+    """/level ID lite|standard|pro — старая команда: меняет тариф агентства этого сотрудника."""
+    if msg.from_user.id not in config.admin_ids:
+        return
+    parts = (msg.text or "").split()
+    if len(parts) != 3 or not parts[1].isdigit() or parts[2] not in LEVELS:
+        await msg.answer("Как сменить тариф: /plan №А lite|standard|pro. № агентства есть в /users.")
+        return
+    a = await find_agency(parts[1])
+    if not a:
+        await msg.answer("Нет такого агентства. Посмотрите № в /users.")
+        return
+    await db.update_agency(a["id"], plan=parts[2])
+    if parts[2] == "lite":
+        await trim_lite_districts(a["id"])
+    await msg.answer(f"Готово: «{a['name']}» — {t(f'level_{parts[2]}', 'ru')}.")

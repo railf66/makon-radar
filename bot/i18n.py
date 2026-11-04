@@ -19,8 +19,8 @@ DISTRICTS = {
 T = {
     "choose_lang": {"ru": "Выберите язык / Tilni tanlang", "uz": "Tilni tanlang / Выберите язык"},
     "need_code": {
-        "ru": "Это пилотная версия бота для агентства. Введите код доступа:",
-        "uz": "Bu agentlik uchun botning sinov versiyasi. Kirish kodini kiriting:",
+        "ru": "Введите код доступа с визитки или код вашего агентства (его даёт коллега). Нет кода? Выберите тариф кнопкой ниже.",
+        "uz": "Vizitkadagi kirish kodini yoki agentligingiz kodini kiriting (uni hamkasbingiz beradi). Kod yo‘qmi? Quyidagi tugma orqali tarifni tanlang.",
     },
     "bad_code": {"ru": "Неверный код. Попробуйте ещё раз.", "uz": "Kod noto‘g‘ri. Qayta urinib ko‘ring."},
     "code_first": {
@@ -31,13 +31,49 @@ T = {
         "ru": "Код принят! Бесплатный пробный период до {date} включительно.",
         "uz": "Kod qabul qilindi! Bepul sinov muddati {date} gacha (shu kun ham kiradi).",
     },
+    "team_code": {
+        "ru": "Чтобы подключить коллег из вашего агентства, дайте им код {code}. Его вводят вместо кода с визитки.",
+        "uz": "Agentligingizdagi hamkasblarni ulash uchun ularga {code} kodini bering. Uni vizitkadagi kod o‘rniga kiritishadi.",
+    },
+    "trial_pending": {
+        "ru": "Код принят! Заявка на пробный период отправлена, мы подтвердим её в ближайшее время и бот вам напишет.",
+        "uz": "Kod qabul qilindi! Sinov muddatiga ariza yuborildi, tez orada tasdiqlaymiz va bot sizga yozadi.",
+    },
+    "trial_rejected": {
+        "ru": "Пробный период не подтверждён. Если вы из уже подключённого агентства, попросите у коллег код агентства.",
+        "uz": "Sinov muddati tasdiqlanmadi. Agar agentligingiz allaqachon ulangan bo‘lsa, hamkasblardan agentlik kodini so‘rang.",
+    },
+    "joined": {
+        "ru": "Вы подключены к агентству «{name}».",
+        "uz": "Siz «{name}» agentligiga ulandingiz.",
+    },
+    "seats_full": {
+        "ru": "В агентстве «{name}» заняты все места по тарифу ({limit}). Чтобы добавить сотрудника, свяжитесь с нами{contact}.",
+        "uz": "«{name}» agentligida tarif bo‘yicha barcha o‘rinlar band ({limit}). Xodim qo‘shish uchun biz bilan bog‘laning{contact}.",
+    },
+    "team_info": {
+        "ru": "🏢 {name}\nТариф: {plan}\nСотрудников: {count} из {limit}\nДоступ: {until}\nКод для коллег: {code}\n\n{members}",
+        "uz": "🏢 {name}\nTarif: {plan}\nXodimlar: {count} / {limit}\nKirish: {until}\nHamkasblar uchun kod: {code}\n\n{members}",
+    },
+    "no_team": {"ru": "Вы не состоите в агентстве.", "uz": "Siz agentlikka a’zo emassiz."},
+    "unlimited": {"ru": "без ограничения", "uz": "cheklanmagan"},
+    "until_date": {"ru": "до {date} включительно", "uz": "{date} gacha"},
+    "no_limit_date": {"ru": "без срока", "uz": "muddatsiz"},
+    "plan_seats": {"ru": "До {n} сотрудников", "uz": "{n} tagacha xodim"},
+    "plan_unlimited": {"ru": "Сотрудников без ограничения", "uz": "Xodimlar soni cheklanmagan"},
+    "plan_extra": {"ru": "Дополнительный сотрудник сверх тарифа", "uz": "Tarifdan tashqari qo‘shimcha xodim"},
+    "plan_changed": {
+        "ru": "Ваше агентство «{name}» переведено на тариф {plan}: {seats}. Доступ {until}.",
+        "uz": "«{name}» agentligingiz {plan} tarifiga o‘tkazildi: {seats}. Kirish {until}.",
+    },
+    "menu_team": {"ru": "👥 Моя команда", "uz": "👥 Jamoam"},
     "trial_tomorrow": {
-        "ru": "Завтра, {date}, заканчивается бесплатный пробный период Makon Radar. Чтобы продолжить получать объявления, свяжитесь с нами{contact}.",
-        "uz": "Ertaga, {date}, Makon Radar bepul sinov muddati tugaydi. E’lonlarni olishni davom ettirish uchun biz bilan bog‘laning{contact}.",
+        "ru": "Завтра, {date}, заканчивается доступ вашего агентства к Makon Radar. Чтобы продолжить получать объявления, свяжитесь с нами{contact}.",
+        "uz": "Ertaga, {date}, agentligingizning Makon Radar’dan foydalanish muddati tugaydi. E’lonlarni olishni davom ettirish uchun biz bilan bog‘laning{contact}.",
     },
     "pilot_over": {
-        "ru": "Пилотный период закончился. Свяжитесь с нами, чтобы продолжить.",
-        "uz": "Sinov muddati tugadi. Davom ettirish uchun biz bilan bog‘laning.",
+        "ru": "Срок доступа вашего агентства к Makon Radar закончился. Чтобы объявления снова приходили, выберите тариф 👇",
+        "uz": "Agentligingizning Makon Radar’dan foydalanish muddati tugadi. E’lonlar yana kelishi uchun tarifni tanlang 👇",
     },
     "welcome": {
         "ru": "Здравствуйте! Я присылаю новые объявления о недвижимости в Ташкенте с OLX.uz сразу после публикации.\n\nНастройте фильтры, и я начну присылать подходящие варианты.",
@@ -49,6 +85,7 @@ T = {
     "menu_pause": {"ru": "⏸ Пауза", "uz": "⏸ To‘xtatish"},
     "menu_resume": {"ru": "▶️ Включить рассылку", "uz": "▶️ Yuborishni yoqish"},
     "menu_lang": {"ru": "🌐 Язык", "uz": "🌐 Til"},
+    "menu_tariff": {"ru": "💳 Тариф", "uz": "💳 Tarif"},
     "menu_shown": {"ru": "Меню внизу экрана 👇", "uz": "Menyu ekranning pastida 👇"},
     "paused": {"ru": "Рассылка на паузе.", "uz": "Yuborish to‘xtatildi."},
     "resumed": {"ru": "Рассылка включена.", "uz": "Yuborish yoqildi."},
@@ -92,6 +129,76 @@ T = {
         "ru": "Объявления за 7 дней по вашим фильтрам",
         "uz": "Filtrlaringiz bo‘yicha 7 kunlik e’lonlar",
     },
+    # --- тарифы и оплата ---
+    "level_lite": {"ru": "Лайт", "uz": "Layt"},
+    "level_standard": {"ru": "Стандарт", "uz": "Standart"},
+    "level_pro": {"ru": "Pro", "uz": "Pro"},
+    "level_trial": {"ru": "пробный период", "uz": "sinov muddati"},
+    "tariff_title": {
+        "ru": "<b>Тарифы Makon Radar</b>, оплата за {days} дней:\n\n"
+              "🔹 <b>Лайт — {lite} сум</b>\n{lite_seats}. До 3 районов, подборка новых объявлений раз в час.\n\n"
+              "🔸 <b>Стандарт — {standard} сум</b>\n{standard_seats}. Все районы, новые объявления сразу, проверка каждые 10 минут.\n\n"
+              "⭐ <b>Pro — {pro} сум</b>\n{pro_seats}. Всё из Стандарта, плюс пометка «ниже рынка» и без повторных объявлений одного объекта.\n\n"
+              "Цена за всё агентство. Дополнительный сотрудник сверх тарифа — по договорённости.\n\n"
+              "{current}Выберите тариф:",
+        "uz": "<b>Makon Radar tariflari</b>, {days} kunlik to‘lov:\n\n"
+              "🔹 <b>Layt — {lite} so‘m</b>\n{lite_seats}. 3 tagacha tuman, yangi e’lonlar to‘plami soatiga bir marta.\n\n"
+              "🔸 <b>Standart — {standard} so‘m</b>\n{standard_seats}. Barcha tumanlar, yangi e’lonlar darhol, har 10 daqiqada tekshiruv.\n\n"
+              "⭐ <b>Pro — {pro} so‘m</b>\n{pro_seats}. Standartdagi hammasi, bundan tashqari «bozordan arzon» belgisi va bitta obyektning takroriy e’lonlarisiz.\n\n"
+              "Narx butun agentlik uchun. Tarifdan tashqari qo‘shimcha xodim — kelishuv asosida.\n\n"
+              "{current}Tarifni tanlang:",
+    },
+    "tariff_current": {"ru": "Сейчас у вас: {level}, до {date}.\n\n", "uz": "Hozir sizda: {level}, {date} gacha.\n\n"},
+    "tariff_btn": {"ru": "{level} — {amount} сум", "uz": "{level} — {amount} so‘m"},
+    "choose_tariff_btn": {"ru": "💳 Выбрать тариф", "uz": "💳 Tarifni tanlash"},
+    "extend_btn": {"ru": "💳 Продлить", "uz": "💳 Uzaytirish"},
+    "pay_info": {
+        "ru": "Тариф <b>{level}</b>: {amount} сум за {days} дней.\n\n"
+              "Переведите <b>{amount} сум</b> на карту HUMO:\n<code>{card}</code>{owner}\n\n"
+              "После перевода нажмите «Я оплатил». Мы проверим поступление и включим тариф, обычно в течение часа.",
+        "uz": "<b>{level}</b> tarifi: {days} kun uchun {amount} so‘m.\n\n"
+              "<b>{amount} so‘m</b>ni HUMO kartasiga o‘tkazing:\n<code>{card}</code>{owner}\n\n"
+              "O‘tkazgandan so‘ng «To‘ladim» tugmasini bosing. Tushumni tekshirib, tarifni yoqamiz, odatda bir soat ichida.",
+    },
+    "paid_btn": {"ru": "✅ Я оплатил", "uz": "✅ To‘ladim"},
+    "other_tariff_btn": {"ru": "⬅️ Другой тариф", "uz": "⬅️ Boshqa tarif"},
+    "pay_sent": {
+        "ru": "Спасибо! Проверяем оплату. Как только подтвердим, я напишу и включу тариф.",
+        "uz": "Rahmat! To‘lovni tekshiryapmiz. Tasdiqlashimiz bilan yozaman va tarifni yoqaman.",
+    },
+    "pay_confirmed": {
+        "ru": "Оплата подтверждена ✅ Тариф {level} включён до {date} включительно.",
+        "uz": "To‘lov tasdiqlandi ✅ {level} tarifi {date} gacha (shu kun ham kiradi) yoqildi.",
+    },
+    "pay_confirmed_lite": {
+        "ru": "\n\nНа тарифе Лайт выберите от 1 до 3 районов: «⚙️ Фильтры» → «Районы». Подборка будет приходить раз в час.",
+        "uz": "\n\nLayt tarifida 1 tadan 3 tagacha tuman tanlang: «⚙️ Filtrlar» → «Tumanlar». To‘plam soatiga bir marta keladi.",
+    },
+    "pay_rejected": {
+        "ru": "Мы не нашли ваш перевод. Если вы уже оплатили, напишите нам{contact}.",
+        "uz": "O‘tkazmangizni topmadik. Agar to‘lagan bo‘lsangiz, bizga yozing{contact}.",
+    },
+    "lite_max": {
+        "ru": "На тарифе Лайт можно выбрать до 3 районов. Больше районов — на тарифе Стандарт («💳 Тариф»).",
+        "uz": "Layt tarifida 3 tagacha tuman tanlash mumkin. Ko‘proq tuman — Standart tarifida («💳 Tarif»).",
+    },
+    "lite_need_district": {
+        "ru": "На тарифе Лайт выберите от 1 до 3 районов, иначе подборка не придёт.",
+        "uz": "Layt tarifida 1 tadan 3 tagacha tuman tanlang, aks holda to‘plam kelmaydi.",
+    },
+    "digest_head": {"ru": "🕐 Новые объявления за час: {n}", "uz": "🕐 So‘nggi bir soatdagi yangi e’lonlar: {n}"},
+    "digest_more": {
+        "ru": "…и ещё {n}. Все объявления есть в «📊 Выгрузка в Excel».",
+        "uz": "…yana {n} ta. Barcha e’lonlar «📊 Excelga yuklash» bo‘limida.",
+    },
+    "below_market": {
+        "ru": "🔥 Ниже рынка на {pct}% (по цене за м² в этом районе)",
+        "uz": "🔥 Bozordan {pct}% arzon (shu tumandagi 1 m² narxi bo‘yicha)",
+    },
+    "access_soon": {
+        "ru": "{date} заканчивается ваш доступ к Makon Radar. Чтобы объявления приходили без перерыва, продлите тариф 👇",
+        "uz": "{date} kuni Makon Radar’dan foydalanish muddati tugaydi. E’lonlar uzilishsiz kelishi uchun tarifni uzaytiring 👇",
+    },
 }
 
 
@@ -107,9 +214,9 @@ def district_name(key: str, lang: str) -> str:
 # Команды для кнопки «Меню» слева от поля ввода
 COMMANDS = {
     "ru": [("menu", "Показать меню"), ("filters", "Фильтры"), ("latest", "Последние объявления"),
-           ("export", "Выгрузка в Excel"), ("pause", "Пауза / включить рассылку"), ("lang", "Язык"),
-           ("start", "Начать заново")],
+           ("export", "Выгрузка в Excel"), ("pause", "Пауза / включить рассылку"), ("team", "Моя команда"),
+           ("lang", "Язык"), ("tariff", "Тариф и оплата"), ("start", "Начать заново")],
     "uz": [("menu", "Menyuni ko‘rsatish"), ("filters", "Filtrlar"), ("latest", "So‘nggi e’lonlar"),
-           ("export", "Excelga yuklash"), ("pause", "To‘xtatish / yoqish"), ("lang", "Til"),
-           ("start", "Qaytadan boshlash")],
+           ("export", "Excelga yuklash"), ("pause", "To‘xtatish / yoqish"), ("team", "Jamoam"), ("lang", "Til"),
+           ("tariff", "Tarif va to‘lov"), ("start", "Qaytadan boshlash")],
 }
