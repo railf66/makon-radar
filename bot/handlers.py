@@ -839,3 +839,35 @@ async def set_level(msg: Message):
     if parts[2] == "lite":
         await trim_lite_districts(a["id"])
     await msg.answer(f"Готово: «{a['name']}» — {t(f'level_{parts[2]}', 'ru')}.")
+
+
+@router.message(Command("msg"))
+async def send_to_user(msg: Message):
+    """/msg ID текст — написать человеку от имени бота."""
+    if not admin(msg):
+        return
+    parts = (msg.text or "").split(maxsplit=2)
+    if len(parts) != 3 or not parts[1].isdigit():
+        await msg.answer("Как написать человеку от имени бота: /msg ID текст "
+                         "(например /msg 123456789 Здравствуйте!). ID есть в /users.")
+        return
+    try:
+        await msg.bot.send_message(int(parts[1]), parts[2])
+    except Exception as e:
+        await msg.answer(f"Не отправилось: {e}")
+        return
+    await msg.answer("✅ Отправлено.")
+
+
+@router.message(F.text & ~F.text.startswith("/"))
+async def forward_to_admins(msg: Message):
+    """Обычный текст, который боту не команда, пересылаем админам, чтобы ответить через /msg."""
+    if admin(msg):
+        return
+    user = await db.get_user(msg.from_user.id)
+    who = msg.from_user.full_name + (f" (@{msg.from_user.username})" if msg.from_user.username else "")
+    if user and user.get("agency_id") and (a := await db.get_agency(user["agency_id"])):
+        who += f", агентство «{a['name']}» №{a['id']}"
+    from .scheduler import notify_admins
+    await notify_admins(msg.bot, f"💬 Сообщение боту от {who}, id {msg.from_user.id}:\n{msg.text}\n\n"
+                                 f"Ответить: /msg {msg.from_user.id} текст")
