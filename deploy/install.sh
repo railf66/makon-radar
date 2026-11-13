@@ -3,7 +3,7 @@
 #   sh deploy/install.sh
 # Повторный запуск обновляет код и сохраняет настройки (.env) и базу.
 set -e
-apt-get update -y && apt-get install -y python3 python3-venv
+apt-get update -y && apt-get install -y python3 python3-venv git curl
 id olxbot >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin olxbot
 mkdir -p /opt/olx-bot
 cp -r main.py requirements.txt bot /opt/olx-bot/
@@ -19,5 +19,18 @@ python3 -m venv /opt/olx-bot/.venv
 chown -R olxbot:olxbot /opt/olx-bot && chmod 600 /opt/olx-bot/.env
 cp deploy/olx-bot.service /etc/systemd/system/olx-bot.service
 systemctl daemon-reload && systemctl enable olx-bot && systemctl restart olx-bot
+# Автообновление из GitHub каждые 5 минут (deploy/autoupdate.sh)
+cat > /etc/systemd/system/olx-autoupdate.service <<UNIT
+[Unit]
+Description=Makon Radar - автообновление из GitHub
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh $(pwd)/deploy/autoupdate.sh
+UNIT
+cp deploy/olx-autoupdate.timer /etc/systemd/system/olx-autoupdate.timer
+systemctl daemon-reload && systemctl enable --now olx-autoupdate.timer
 sleep 5 && systemctl --no-pager status olx-bot | head -5
 echo "Готово. Логи: journalctl -u olx-bot -f   Настройки: nano /opt/olx-bot/.env"
+echo "Автообновление из GitHub включено (каждые 5 минут). Лог: /var/log/olx-autoupdate.log"
