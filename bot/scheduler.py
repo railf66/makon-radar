@@ -109,8 +109,8 @@ async def send_digests(bot: Bot):
 
 
 async def check_trials(bot: Bot):
-    """Срок общий на агентство. За WARN_DAYS дней до конца напоминаем сотрудникам об оплате,
-    когда срок вышел, сообщаем им и админу."""
+    """Срок общий на агентство. За WARN_DAYS дней до конца пробного периода просим отзыв,
+    напоминаем сотрудникам об оплате; когда срок вышел, сообщаем им и админу."""
     soon = (date.today() + timedelta(days=config.warn_days)).isoformat()
     for agency in await db.agencies():
         until = agency.get("until")
@@ -118,6 +118,19 @@ async def check_trials(bot: Bot):
             continue
         members = await db.agency_members(agency["id"])
         over = agency_over(agency)
+        if not over and not agency.get("plan") and until <= soon and not agency.get("feedback_asked"):
+            # Пробный период скоро кончится: просим отзыв и рассказываем о Дильнозе (каждому на его языке)
+            sent = []
+            for user in members:
+                try:
+                    await bot.send_message(user["id"], t("feedback_ask", user["lang"]))
+                    sent.append(f"{user['name']} ({user['lang']})")
+                except Exception:
+                    log.warning("Не смог попросить отзыв у %s", user["id"])
+            await notify_admins(bot, f"💬 Агентству «{agency['name']}» (№{agency['id']}, пробный до "
+                                     f"{fmt_date(until)}) отправлена просьба об отзыве и о Дильнозе: "
+                                     f"{', '.join(sent) or 'никому не дошло'}. Ответы придут сюда.")
+            await db.update_agency(agency["id"], feedback_asked=1)
         if not over and until <= soon and agency["warned"] < 1:
             for user in members:
                 try:
