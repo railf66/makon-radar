@@ -100,6 +100,13 @@ class DB:
             await self.conn.execute("ALTER TABLE users ADD COLUMN pending INTEGER DEFAULT 0")
         if "agency_id" not in cols:
             await self.conn.execute("ALTER TABLE users ADD COLUMN agency_id INTEGER")
+        # История: последнее агентство (не стирается при /remove), когда отказали в пробном,
+        # когда последний раз сообщали админу, что человек с истёкшим доступом снова пишет
+        if "last_agency_id" not in cols:
+            await self.conn.execute("ALTER TABLE users ADD COLUMN last_agency_id INTEGER")
+        for col in ("rejected_at", "over_notified"):
+            if col not in cols:
+                await self.conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         # Агенты, подключившиеся до агентств: каждый получает своё агентство с прежним сроком,
         # потом админ объединяет сотрудников командой /move
         cur = await self.conn.execute(
@@ -110,6 +117,8 @@ class DB:
             agency_id = await self._insert_agency(u["name"], u["trial_until"], u["trial_warned"] or 0,
                                                   plan=u["level"])
             await self.conn.execute("UPDATE users SET agency_id=? WHERE id=?", (agency_id, u["id"]))
+        await self.conn.execute(
+            "UPDATE users SET last_agency_id=agency_id WHERE last_agency_id IS NULL AND agency_id IS NOT NULL")
 
     async def close(self):
         if self.conn:
@@ -137,6 +146,8 @@ class DB:
     async def update_user(self, user_id: int, **fields):
         if "filters" in fields:
             fields["filters"] = json.dumps(fields["filters"])
+        if fields.get("agency_id"):
+            fields["last_agency_id"] = fields["agency_id"]
         sets = ", ".join(f"{k}=?" for k in fields)
         await self.conn.execute(f"UPDATE users SET {sets} WHERE id=?", (*fields.values(), user_id))
         await self.conn.commit()

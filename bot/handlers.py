@@ -127,7 +127,47 @@ def contact_suffix() -> str:
 
 
 def fmt_date(d: str) -> str:
-    return date.fromisoformat(d).strftime("%d.%m.%Y")
+    return date.fromisoformat(d[:10]).strftime("%d.%m.%Y")
+
+
+def days_ago(d: str) -> str:
+    n = (date.today() - date.fromisoformat(d[:10])).days
+    if n <= 0:
+        return "сегодня"
+    if n == 1:
+        return "вчера"
+    return f"{n} дн. назад"
+
+
+async def history_note(user: dict | None) -> str:
+    """Был ли человек уже подключён раньше — чтобы админ видел повторные заявки на пробный."""
+    if not user or user["id"] in config.admin_ids:
+        return ""
+    lines = []
+    aid = user.get("agency_id") or user.get("last_agency_id")
+    a = await db.get_agency(aid) if aid else None
+    if a:
+        left = "" if user.get("authorized") and user.get("agency_id") == a["id"] else ", потом отключён"
+        if not a.get("until"):
+            term = "доступ без срока"
+        elif agency_over(a):
+            term = f"последний день доступа {fmt_date(a['until'])} ({days_ago(a['until'])})"
+        else:
+            term = f"доступ действует до {fmt_date(a['until'])}"
+        lines.append(f"⚠️ Уже был активирован ранее: агентство №{a['id']} «{a['name']}», "
+                     f"{plan_name(a['plan'])}{left}, {term}.")
+    elif aid:
+        lines.append(f"⚠️ Уже был активирован ранее: агентство №{aid} (сейчас удалено).")
+    elif user.get("trial_until"):
+        lines.append(f"⚠️ Уже был активирован ранее, доступ был до {fmt_date(user['trial_until'])}.")
+    if user.get("rejected_at"):
+        lines.append(f"⚠️ Раньше заявку уже отклоняли: {fmt_date(user['rejected_at'])} "
+                     f"({days_ago(user['rejected_at'])}).")
+    return "\n".join(lines)
+
+
+def who_text(tg_user) -> str:
+    return tg_user.full_name + (f" (@{tg_user.username})" if getattr(tg_user, "username", None) else "")
 
 
 # --- старт и доступ ---
@@ -157,6 +197,10 @@ async def set_lang(cb: CallbackQuery, state: FSMContext):
             return
         await db.update_user(cb.from_user.id, authorized=1)
         user = await db.get_user(cb.from_user.id)
+    elif trial_over(user):
+        await cb.message.answer(t("pilot_over", lang), reply_markup=tariff_btn_kb(lang))
+        await notify_over(cb.bot, cb.from_user, user)
+        return
     await cb.message.answer(t("welcome", lang), reply_markup=main_kb(user))
     await cb.message.answer(t("filters_title", lang), reply_markup=filters_kb(user))
 
@@ -214,12 +258,19 @@ async def check_code(msg: Message, state: FSMContext):
 
 
 async def ask_approval(bot, tg_user):
-    who = tg_user.full_name + (f" (@{tg_user.username})" if getattr(tg_user, "username", None) else "")
     kb = InlineKeyboardMarkup(inline_keyboard=[[btn("✅ Одобрить", f"ap:ok:{tg_user.id}"),
                                                 btn("❌ Отказать", f"ap:no:{tg_user.id}")]])
-    text = (f"🆕 Заявка на пробный период: {who}, id {tg_user.id}.\n"
-            f"Если это сотрудник уже подключённого агентства, жмите «Отказать» "
-            f"или добавьте его туда: /move {tg_user.id} №А (№ в /users).")
+    user = await db.get_user(tg_user.id)
+    note = await history_note(user)
+    text = f"🆕 Заявка на пробный период: {who_text(tg_user)}, id {tg_user.id}.\n"
+    if note:
+        aid = user.get("last_agency_id")
+        text += (note + "\n«Одобрить» даст новый пробный период с нуля."
+                 + (f" Вернуть в прежнее агентство: /move {tg_user.id} {aid}, продлить: /extend {aid} 14."
+                    if aid and await db.get_agency(aid) else ""))
+    else:
+        text += ("Если это сотрудник уже подключённого агентства, жмите «Отказать» "
+                 f"или добавьте его туда: /move {tg_user.id} №А (№ в /users).")
     for admin_id in config.admin_ids:
         try:
             await bot.send_message(admin_id, text, reply_markup=kb)
@@ -253,7 +304,7 @@ async def approval(cb: CallbackQuery):
         except Exception:
             result += " Не смог ему написать."
     else:
-        await db.update_user(user["id"], pending=0)
+        await db.update_user(user["id"], pending=0, rejected_at=date.today().isoformat())
         result = f"❌ Отказано: {user['name']}."
         try:
             await cb.bot.send_message(user["id"], t("trial_rejected", lang) + (f"\n{config.contact}" if config.contact else ""))
@@ -263,14 +314,32 @@ async def approval(cb: CallbackQuery):
     await cb.answer()
 
 
-async def authorized_user(user_id: int, answer):
-    user = await db.get_user(user_id)
+async def notify_over(bot, tg_user, user: dict):
+    """Человек с закончившимся доступом снова пользуется ботом — сообщаем админу раз в день."""
+    today = date.today().isoformat()
+    if user.get("over_notified") == today:
+        return
+    await db.update_user(user["id"], over_notified=today)
+    note = await history_note(user)
+    aid = user.get("agency_id")
+    from .scheduler import notify_admins
+    await notify_admins(bot, f"🔁 Снова пишет в бот после окончания доступа: {who_text(tg_user)}, id {user['id']}.\n"
+                             f"{note}\n" + (f"Продлить: /extend {aid} 14 · " if aid else "")
+                             + f"Написать: /msg {user['id']} текст")
+
+
+async def pilot_over(msg: Message, user: dict):
+    await msg.answer(t("pilot_over", user["lang"]), reply_markup=tariff_btn_kb(user["lang"]))
+    await notify_over(msg.bot, msg.from_user, user)
+
+
+async def authorized_user(msg: Message):
+    user = await db.get_user(msg.from_user.id)
     if not user or not user["authorized"]:
-        await answer(t("choose_lang", "ru"), reply_markup=lang_kb())
+        await msg.answer(t("choose_lang", "ru"), reply_markup=lang_kb())
         return None
     if trial_over(user):
-        await answer(t("pilot_over", user["lang"]), reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[btn(t("choose_tariff_btn", user["lang"]), "tariff")]]))
+        await pilot_over(msg, user)
         return None
     return user
 
@@ -280,7 +349,7 @@ async def authorized_user(user_id: int, answer):
 @router.message(Command("filters"))
 @router.message(F.text.in_(menu_texts("menu_filters")))
 async def show_filters(msg: Message):
-    if user := await authorized_user(msg.from_user.id, msg.answer):
+    if user := await authorized_user(msg):
         await msg.answer(t("filters_title", user["lang"]), reply_markup=filters_kb(user))
 
 
@@ -395,14 +464,14 @@ async def filters_done(cb: CallbackQuery):
 @router.message(Command("menu"))
 async def show_menu(msg: Message):
     """Заново показывает нижнее меню (на компьютере оно бывает скрыто)."""
-    if user := await authorized_user(msg.from_user.id, msg.answer):
+    if user := await authorized_user(msg):
         await msg.answer(t("menu_shown", user["lang"]), reply_markup=main_kb(user))
 
 
 @router.message(Command("latest"))
 @router.message(F.text.in_(menu_texts("menu_latest")))
 async def latest(msg: Message):
-    user = await authorized_user(msg.from_user.id, msg.answer)
+    user = await authorized_user(msg)
     if not user:
         return
     found = [i for i in await db.recent_listings(days=3) if matches(i, user["filters"])][:5]
@@ -415,7 +484,7 @@ async def latest(msg: Message):
 @router.message(Command("export"))
 @router.message(F.text.in_(menu_texts("menu_export")))
 async def export(msg: Message):
-    user = await authorized_user(msg.from_user.id, msg.answer)
+    user = await authorized_user(msg)
     if not user:
         return
     items = [i for i in await db.recent_listings(days=7) if matches(i, user["filters"])]
@@ -430,7 +499,7 @@ async def export(msg: Message):
 @router.message(Command("pause"))
 @router.message(F.text.in_(menu_texts("menu_pause") | menu_texts("menu_resume")))
 async def pause(msg: Message):
-    user = await authorized_user(msg.from_user.id, msg.answer)
+    user = await authorized_user(msg)
     if not user:
         return
     active = 0 if user["active"] else 1
@@ -448,7 +517,7 @@ async def change_lang(msg: Message):
 @router.message(Command("team"))
 @router.message(F.text.in_(menu_texts("menu_team")))
 async def team(msg: Message):
-    user = await authorized_user(msg.from_user.id, msg.answer)
+    user = await authorized_user(msg)
     if not user:
         return
     lang, a = user["lang"], user["agency"]
@@ -742,6 +811,7 @@ async def i_paid(cb: CallbackQuery):
                f"{plan_name(user['agency']['plan'])}"
                + (f", до {fmt_date(user['agency']['until'])}" if user['agency'].get("until") else "")
                if user.get("agency") else "Агентства пока нет, после подтверждения создам новое")
+            + (f"\n{note}" if not user.get("agency") and (note := await history_note(user)) else "")
             + "\n\nПроверьте поступление на карту и нажмите кнопку.")
     kb = InlineKeyboardMarkup(inline_keyboard=[[btn("✅ Подтвердить", f"payok:{user['id']}:{level}"),
                                                 btn("❌ Отклонить", f"payno:{user['id']}:{level}")]])
@@ -868,6 +938,10 @@ async def forward_to_admins(msg: Message):
     who = msg.from_user.full_name + (f" (@{msg.from_user.username})" if msg.from_user.username else "")
     if user and user.get("agency_id") and (a := await db.get_agency(user["agency_id"])):
         who += f", агентство «{a['name']}» №{a['id']}"
+    note = await history_note(user) if user and (not user["authorized"] or trial_over(user)) else ""
+    if user and user["authorized"] and trial_over(user):
+        await db.update_user(user["id"], over_notified=date.today().isoformat())  # уже сообщаем здесь
     from .scheduler import notify_admins
-    await notify_admins(msg.bot, f"💬 Сообщение боту от {who}, id {msg.from_user.id}:\n{msg.text}\n\n"
+    await notify_admins(msg.bot, f"💬 Сообщение боту от {who}, id {msg.from_user.id}:\n{msg.text}\n"
+                                 + (f"{note}\n" if note else "") + "\n"
                                  f"Ответить: /msg {msg.from_user.id} текст")
