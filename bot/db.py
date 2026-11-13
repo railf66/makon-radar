@@ -107,6 +107,10 @@ class DB:
         for col in ("rejected_at", "over_notified"):
             if col not in cols:
                 await self.conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+        acols = {r[1] for r in await (await self.conn.execute("PRAGMA table_info(agencies)")).fetchall()}
+        if "feedback_asked" not in acols:
+            # 1 — перед концом пробного периода попросили отзыв и рассказали о Дильнозе
+            await self.conn.execute("ALTER TABLE agencies ADD COLUMN feedback_asked INTEGER DEFAULT 0")
         # Агенты, подключившиеся до агентств: каждый получает своё агентство с прежним сроком,
         # потом админ объединяет сотрудников командой /move
         cur = await self.conn.execute(

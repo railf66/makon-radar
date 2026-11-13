@@ -204,6 +204,22 @@ T = {
         "ru": "🔥 Ниже рынка на {pct}% (по цене за м² в этом районе)",
         "uz": "🔥 Bozordan {pct}% arzon (shu tumandagi 1 m² narxi bo‘yicha)",
     },
+    "feedback_ask": {
+        "ru": "Здравствуйте! Это Раиль, Makon Radar. Ваш пробный период скоро заканчивается. "
+              "Подскажите, пожалуйста, как вам бот: попадались полезные объявления от собственников, "
+              "чего не хватает? Просто ответьте на это сообщение, пара слов очень поможет его улучшить. "
+              "Если хотите продолжить, расскажу об условиях.\n\n"
+              "И ещё: посмотрите нашего ИИ-ассистента Дильнозу @makon_dilnoza_bot. Она сама отвечает "
+              "клиентам агентства в Telegram, подбирает квартиры с фото и записывает на просмотр, "
+              "а объекты из Radar добавляются к ней кнопкой «⭐ Дильнозе».",
+        "uz": "Assalomu alaykum! Bu Rail, Makon Radar. Sinov muddatingiz yaqinda tugaydi. "
+              "Bot sizga qanday bo‘ldi: egasidan foydali e’lonlar chiqdimi, nima yetishmayapti? "
+              "Shu xabarga javob yozing, bir-ikki so‘z botni yaxshilashga juda yordam beradi. "
+              "Davom ettirmoqchi bo‘lsangiz, shartlarini aytib beraman.\n\n"
+              "Yana bir narsa: AI-yordamchimiz Dilnozani ko‘rib chiqing @makon_dilnoza_bot. U agentlik "
+              "mijozlariga Telegramda o‘zi javob beradi, rasm bilan kvartira tanlaydi va ko‘rishga yozib "
+              "qo‘yadi, Radar’dagi obyektlar unga «⭐ Дильнозе» tugmasi bilan qo‘shiladi.",
+    },
     "access_soon": {
         "ru": "{date} заканчивается ваш доступ к Makon Radar. Чтобы объявления приходили без перерыва, продлите тариф 👇",
         "uz": "{date} kuni Makon Radar’dan foydalanish muddati tugaydi. E’lonlar uzilishsiz kelishi uchun tarifni uzaytiring 👇",
