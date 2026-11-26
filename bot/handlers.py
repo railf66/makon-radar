@@ -17,6 +17,7 @@ from .export import build_excel
 from .filters import format_listing, matches
 from .i18n import DISTRICTS, T, district_name, t
 from .sender import send_listing
+from .similar import similar
 
 router = Router()
 
@@ -166,6 +167,45 @@ async def history_note(user: dict | None) -> str:
     return "\n".join(lines)
 
 
+REPEAT_DAYS = 3  # короткий пробный для похожих на повторную заявку
+
+
+def term_text(a: dict) -> str:
+    if not a.get("until"):
+        return "доступ без срока"
+    if agency_over(a):
+        return f"доступ закончился {fmt_date(a['until'])} ({days_ago(a['until'])})"
+    return f"доступ до {fmt_date(a['until'])}"
+
+
+async def similar_note(tg_user) -> str:
+    """Ищем похожие агентства и людей по имени и @username в Telegram — новый id,
+    но, скорее всего, то же агентство (например «RizoMulk 22» после «RizoMulk»)."""
+    names = [tg_user.full_name] + ([tg_user.username] if getattr(tg_user, "username", None) else [])
+    agencies = {a["id"]: a for a in await db.agencies()}
+    hits: dict[int, str] = {}
+    for a in agencies.values():
+        if any(similar(n, a["name"]) for n in names):
+            hits.setdefault(a["id"], "похожее название")
+    lines = []
+    for u in await db.all_users():
+        if u["id"] == tg_user.id or u["id"] in config.admin_ids:
+            continue
+        if not (any(similar(n, u["name"], strict=True) for n in names)
+                or any(similar(n, u.get("username"), strict=True) for n in names)
+                or any(similar(n, u["name"]) for n in names[1:])):
+            continue
+        aid = u.get("agency_id") or u.get("last_agency_id")
+        if aid in agencies:
+            hits.setdefault(aid, f"похож на сотрудника {u['name']} (id {u['id']})")
+        elif u.get("rejected_at"):
+            lines.append(f"• {u['name']} (id {u['id']}) — заявку отклоняли {fmt_date(u['rejected_at'])}")
+    for aid, why in list(hits.items())[:3]:
+        a = agencies[aid]
+        lines.insert(0, f"• №{a['id']} «{a['name']}», {plan_name(a['plan'])}, {term_text(a)} — {why}")
+    return ("🔁 Похоже на повторную заявку:\n" + "\n".join(lines[:4])) if lines else ""
+
+
 def who_text(tg_user) -> str:
     return tg_user.full_name + (f" (@{tg_user.username})" if getattr(tg_user, "username", None) else "")
 
@@ -176,6 +216,8 @@ def who_text(tg_user) -> str:
 async def start(msg: Message, state: FSMContext):
     await state.clear()
     await db.ensure_user(msg.from_user.id, msg.from_user.full_name)
+    if msg.from_user.username:
+        await db.update_user(msg.from_user.id, username=msg.from_user.username)
     await msg.answer(t("choose_lang", "ru"), reply_markup=lang_kb())
 
 
@@ -258,22 +300,33 @@ async def check_code(msg: Message, state: FSMContext):
 
 
 async def ask_approval(bot, tg_user):
-    kb = InlineKeyboardMarkup(inline_keyboard=[[btn("✅ Одобрить", f"ap:ok:{tg_user.id}"),
-                                                btn("❌ Отказать", f"ap:no:{tg_user.id}")]])
+    if getattr(tg_user, "username", None):
+        await db.update_user(tg_user.id, username=tg_user.username)
     user = await db.get_user(tg_user.id)
     note = await history_note(user)
+    sim = await similar_note(tg_user)
     text = f"🆕 Заявка на пробный период: {who_text(tg_user)}, id {tg_user.id}.\n"
     if note:
         aid = user.get("last_agency_id")
-        text += (note + "\n«Одобрить» даст новый пробный период с нуля."
+        text += (note + "\nОдобрение даст новый пробный период с нуля."
                  + (f" Вернуть в прежнее агентство: /move {tg_user.id} {aid}, продлить: /extend {aid} 14."
-                    if aid and await db.get_agency(aid) else ""))
+                    if aid and await db.get_agency(aid) else "") + "\n")
+    if sim:
+        text += sim + "\nЕсли это они же — дайте 3 дня или откажите. Добавить в их агентство: /move "
+        text += f"{tg_user.id} №А.\n"
+    if note or sim:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [btn(f"✅ {REPEAT_DAYS} дня", f"ap:ok:{tg_user.id}:{REPEAT_DAYS}"),
+             btn(f"✅ {config.trial_days} дней", f"ap:ok:{tg_user.id}:{config.trial_days}")],
+            [btn("❌ Отказать", f"ap:no:{tg_user.id}")]])
     else:
-        text += ("Если это сотрудник уже подключённого агентства, жмите «Отказать» "
+        kb = InlineKeyboardMarkup(inline_keyboard=[[btn("✅ Одобрить", f"ap:ok:{tg_user.id}"),
+                                                    btn("❌ Отказать", f"ap:no:{tg_user.id}")]])
+        text += ("Похожих агентств не нашёл. Если это сотрудник уже подключённого агентства, жмите «Отказать» "
                  f"или добавьте его туда: /move {tg_user.id} №А (№ в /users).")
     for admin_id in config.admin_ids:
         try:
-            await bot.send_message(admin_id, text, reply_markup=kb)
+            await bot.send_message(admin_id, text.strip(), reply_markup=kb)
         except Exception:
             pass
 
@@ -283,7 +336,9 @@ async def approval(cb: CallbackQuery):
     if cb.from_user.id not in config.admin_ids:
         await cb.answer()
         return
-    _, action, uid = cb.data.split(":")
+    parts = cb.data.split(":")
+    action, uid = parts[1], parts[2]
+    days = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else config.trial_days
     user = await db.get_user(int(uid))
     if not user or not user.get("pending"):
         await cb.answer("Заявка уже обработана", show_alert=True)
@@ -291,11 +346,12 @@ async def approval(cb: CallbackQuery):
         return
     lang = user["lang"]
     if action == "ok":
-        until = (date.today() + timedelta(days=config.trial_days)).isoformat()
+        until = (date.today() + timedelta(days=days)).isoformat()
         agency = await db.create_agency(user["name"], until)
         await db.update_user(user["id"], authorized=1, pending=0, trial_warned=0, agency_id=agency["id"])
         user = await db.get_user(user["id"])
-        result = f"✅ Одобрено: {user['name']}, агентство №{agency['id']}, до {fmt_date(until)}."
+        result = (f"✅ Одобрено на {days} дн.: {user['name']}, агентство №{agency['id']}, до {fmt_date(until)}.\n"
+                  f"Изменить срок: /extend {agency['id']} ДНЕЙ, закрыть доступ сразу: /stop {agency['id']}")
         try:
             await cb.bot.send_message(user["id"], t("trial_started", lang).format(date=fmt_date(until)))
             await cb.bot.send_message(user["id"], t("team_code", lang).format(code=agency["code"]))
@@ -563,7 +619,7 @@ async def users_list(msg: Message):
         blocks.append("Без агентства:\n" + "\n".join(f"   • {u['name']} — id {u['id']}" for u in loose))
     text = "\n\n".join(blocks) or "Агентств пока нет."
     text += ("\n\nКоманды: /extend №А 30 — продлить, /plan №А lite|standard|pro [доп.мест], "
-             "/move ID №А — перенести сотрудника, /rename №А Название, /remove ID — отключить, "
+             "/stop №А — закрыть доступ сразу, /move ID №А — перенести сотрудника, /rename №А Название, /remove ID — отключить, "
              "/newagency Название — новое агентство")
     for i in range(0, len(text), 4000):  # лимит длины сообщения Telegram
         await msg.answer(text[i:i + 4000])
@@ -609,6 +665,23 @@ async def extend(msg: Message):
     for m in await db.agency_members(a["id"]):
         await db.update_user(m["id"], active=1)
     await msg.answer(f"Готово: «{a['name']}» — " + (f"до {fmt_date(until)}" if until else "без срока") + ".")
+
+
+@router.message(Command("stop"))
+async def stop_access(msg: Message):
+    """/stop №А — закрыть доступ агентству сегодня (например, повторный пробный)."""
+    if not admin(msg):
+        return
+    parts = (msg.text or "").split()
+    a = await find_agency(parts[1]) if len(parts) == 2 else None
+    if not a:
+        await msg.answer("Как закрыть доступ: /stop №А (№ агентства или id сотрудника, есть в /users). "
+                         "Вернуть доступ: /extend №А ДНЕЙ.")
+        return
+    # Последний день — вчера: проверка сроков сама сообщит сотрудникам и остановит рассылку
+    await db.update_agency(a["id"], until=(date.today() - timedelta(days=1)).isoformat(), warned=1)
+    await msg.answer(f"Готово: у «{a['name']}» (№{a['id']}) доступ закрыт. Сотрудникам бот сообщит "
+                     f"в ближайшую проверку. Вернуть: /extend {a['id']} ДНЕЙ.")
 
 
 async def trim_lite_districts(agency_id: int):

@@ -104,7 +104,7 @@ class DB:
         # когда последний раз сообщали админу, что человек с истёкшим доступом снова пишет
         if "last_agency_id" not in cols:
             await self.conn.execute("ALTER TABLE users ADD COLUMN last_agency_id INTEGER")
-        for col in ("rejected_at", "over_notified"):
+        for col in ("rejected_at", "over_notified", "username"):
             if col not in cols:
                 await self.conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         # Агенты, подключившиеся до агентств: каждый получает своё агентство с прежним сроком,
@@ -155,6 +155,11 @@ class DB:
     async def authorized_users(self):
         cur = await self.conn.execute("SELECT id FROM users WHERE authorized=1 ORDER BY created_at")
         return [await self.get_user(r["id"]) for r in await cur.fetchall()]
+
+    async def all_users(self):
+        """Все, кто когда-либо писал боту (для поиска похожих заявок)."""
+        cur = await self.conn.execute("SELECT id, name, username, agency_id, last_agency_id, authorized, rejected_at FROM users")
+        return [dict(r) for r in await cur.fetchall()]
 
     async def active_users(self):
         cur = await self.conn.execute("SELECT id FROM users WHERE authorized=1 AND active=1")
